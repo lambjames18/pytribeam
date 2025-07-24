@@ -4,11 +4,13 @@ import time
 import datetime
 import os
 import tkinter as tk
+from tkinter import ttk
 from tkinter import filedialog
 from tkinter import messagebox
 from pathlib import Path
 from PIL import Image, ImageTk
 import contextlib
+import traceback
 
 # Threading for controlling experiment stops
 import ctypes
@@ -20,7 +22,8 @@ import threading
 # pytribeam imports
 import pytribeam.GUI.CustomTkinterWidgets as ctk
 from pytribeam.GUI.config_ui.App import Configurator
-from pytribeam import workflow, stage, utilities, log, laser
+from pytribeam import workflow, stage, utilities, log, laser, insertable_devices
+import pytribeam.types as tbt
 
 
 class MainApplication(tk.Tk):
@@ -35,7 +38,7 @@ class MainApplication(tk.Tk):
         )
         self.iconbitmap(ico_path)
         img_path = Path(__file__).parent.parent.parent.parent.joinpath(
-            "docs", "userguide", "src", "logo_color.png"
+            "docs", "userguide", "src", "logos", "logo_color_dark.png"
         )
         self.image = Image.open(img_path)
         self.image_size = (self.image.size[0] // 3, self.image.size[1] // 3)
@@ -43,7 +46,7 @@ class MainApplication(tk.Tk):
         self.image = ImageTk.PhotoImage(self.image)
 
         # Set the window size
-        self.frame_w = int(1100)
+        self.frame_w = int(1200)
         self.frame_h = int(620)
         self.geometry(f"{self.frame_w}x{self.frame_h}")
         self.resizable(False, False)
@@ -201,7 +204,7 @@ class MainApplication(tk.Tk):
         self.valid_status.grid(
             row=5, column=0, columnspan=2, sticky="nsew", pady=2, padx=2
         )
-        create_new = tk.Button(
+        self.create_new_config_button = tk.Button(
             sub_frame,
             text="Create",
             font=ctk.FONT,
@@ -209,8 +212,10 @@ class MainApplication(tk.Tk):
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
-        create_new.grid(row=0, column=1, sticky="nsew", pady=2, padx=2)
-        load_config = tk.Button(
+        self.create_new_config_button.grid(
+            row=0, column=1, sticky="nsew", pady=2, padx=2
+        )
+        self.load_config_button = tk.Button(
             sub_frame,
             text="Load",
             font=ctk.FONT,
@@ -218,8 +223,8 @@ class MainApplication(tk.Tk):
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
-        load_config.grid(row=1, column=1, sticky="nsew", pady=2, padx=2)
-        edit_config = tk.Button(
+        self.load_config_button.grid(row=1, column=1, sticky="nsew", pady=2, padx=2)
+        self.edit_config_button = tk.Button(
             sub_frame,
             text="Edit",
             font=ctk.FONT,
@@ -227,8 +232,8 @@ class MainApplication(tk.Tk):
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
-        edit_config.grid(row=2, column=1, sticky="nsew", pady=2, padx=2)
-        validate = tk.Button(
+        self.edit_config_button.grid(row=2, column=1, sticky="nsew", pady=2, padx=2)
+        self.validate_config_button = tk.Button(
             sub_frame,
             text="Validate",
             font=ctk.FONT,
@@ -236,7 +241,9 @@ class MainApplication(tk.Tk):
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
-        validate.grid(row=5, column=1, columnspan=2, sticky="nsew", pady=2, padx=2)
+        self.validate_config_button.grid(
+            row=5, column=1, columnspan=2, sticky="nsew", pady=2, padx=2
+        )
 
         # Put in the configuration buttons
         l = tk.Label(
@@ -334,9 +341,9 @@ class MainApplication(tk.Tk):
         )
 
         # Put on tooltips
-        ctk.tooltip(create_new, "Create a new configuration file")
-        ctk.tooltip(load_config, "Load an existing configuration file")
-        ctk.tooltip(edit_config, "Edit the current configuration file")
+        ctk.tooltip(self.create_new_config_button, "Create a new configuration file")
+        ctk.tooltip(self.load_config_button, "Load an existing configuration file")
+        ctk.tooltip(self.edit_config_button, "Edit the current configuration file")
         ctk.tooltip(self.starting_slice, "Slice number to start the experiment at.")
         ctk.tooltip(self.starting_step, "Step number to start the experiment at.")
         ctk.tooltip(
@@ -724,16 +731,18 @@ class MainApplication(tk.Tk):
         stop the experiment.
         """
         # Set the start exp button to be disabled and green
-        self._update_exp_control_buttons(start="disabled")
+        self._update_exp_control_buttons(start="disabled", buttons="disabled")
 
         # Grab experiment info
         starting_slice = self.starting_slice_var.get()
         starting_step_name = self.starting_step_var.get()
 
         # Run preflight check
-        experiment_settings = self.validate_config(return_settings=True)
+        experiment_settings: tbt.ExperimentSettings = self.validate_config(
+            return_settings=True
+        )
         if experiment_settings is None:
-            self._update_exp_control_buttons(start="normal")
+            self._update_exp_control_buttons(start="normal", buttons="normal")
             return
         else:
             # Process the experiment settings
@@ -866,6 +875,12 @@ class MainApplication(tk.Tk):
         else:
             # The experiment ended for an unknown reason
             print("-----> Experiment stopped (unknown) <-----")
+        # Ensure that all devices are retracted
+        insertable_devices.retract_all_devices(
+            microscope=experiment_settings.microscope,
+            enable_EBSD=experiment_settings.enable_EBSD,
+            enable_EDS=experiment_settings.enable_EDS,
+        )
         # Reset the stop flags
         self.stop_after_slice.set(False)
         self.stop_after_step.set(False)
@@ -874,7 +889,12 @@ class MainApplication(tk.Tk):
         self._update_exp_control_buttons()
 
     def _update_exp_control_buttons(
-        self, start="normal", step="normal", slice="normal", hard="normal"
+        self,
+        start="normal",
+        step="normal",
+        slice="normal",
+        hard="normal",
+        buttons="normal",
     ):
         """Update the experiment control buttons."""
         start_kwards = {
@@ -913,6 +933,9 @@ class MainApplication(tk.Tk):
         self.stop_step_b.config(**step_kwargs[step])
         self.stop_slice_b.config(**slice_kwargs[slice])
         self.stop_now_b.config(**hard_kwargs[hard])
+        self.create_new_config_button.config({"state": buttons})
+        self.edit_config_button.config({"state": buttons})
+        self.load_config_button.config({"state": buttons})
         self.update_idletasks()
 
     def stop_step(self):
@@ -925,7 +948,11 @@ class MainApplication(tk.Tk):
             return
         self.stop_after_step.set(True)
         self._update_exp_control_buttons(
-            start="disabled", step="disabled", slice="disabled", hard="normal"
+            start="disabled",
+            step="disabled",
+            slice="disabled",
+            hard="normal",
+            buttons="disabled",
         )
 
     def stop_slice(self):
@@ -938,7 +965,11 @@ class MainApplication(tk.Tk):
             return
         self.stop_after_slice.set(True)
         self._update_exp_control_buttons(
-            start="disabled", step="normal", slice="disabled", hard="normal"
+            start="disabled",
+            step="normal",
+            slice="disabled",
+            hard="normal",
+            buttons="disabled",
         )
 
     def stop_hard(self):
@@ -951,7 +982,11 @@ class MainApplication(tk.Tk):
             return
         self.stop_now.set(True)
         self._update_exp_control_buttons(
-            start="disabled", step="disabled", slice="disabled", hard="disabled"
+            start="disabled",
+            step="disabled",
+            slice="disabled",
+            hard="disabled",
+            buttons="disabled",
         )
 
     def open_help(self):
@@ -961,12 +996,7 @@ class MainApplication(tk.Tk):
         path = Path(__file__).parent.parent.parent.parent.joinpath(
             "docs", "userguide", "book", "index.html"
         )
-        if path.exists():
-            webbrowser.open(f"file://{path}")
-        else:
-            webbrowser.open(
-                "https://sandialabs.github.io/pytribeam/docs/userguide/book/index.html"
-            )
+        webbrowser.open(f"file://{path}")
 
     def quit(self):
         """
@@ -1010,6 +1040,14 @@ def step_call_wrapper(out_dict, slice_number, step_index, experiment_settings):
         print(
             f"Unexpected error in step {step_index} of slice {slice_number}: {e.__class__} {e}"
         )
+        err_path = os.path.join(
+            os.getenv("LOCALAPPDATA"),
+            "pytribeam",
+            time.strftime("%Y%m%d-%H%M%S") + "_error_traceback.txt",
+        )
+        with open(err_path, "w") as f:
+            f.write(f"Exception: {type(e).__name__} - {e}\n")
+            traceback.print_exc(file=f)
         try:
             stage.stop(experiment_settings.microscope)
             print("-----> Stage stop unsuccessful")

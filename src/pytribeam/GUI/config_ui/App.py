@@ -1,16 +1,66 @@
-import ctypes
 from pathlib import Path
 from copy import deepcopy
 import tkinter as tk
 from tkinter import messagebox
-import yaml
 
 import pytribeam.utilities as ut
 import pytribeam.types as tbt
 import pytribeam.factory as factory
 import pytribeam.laser as laser
+from pytribeam.constants import Conversions
 import pytribeam.GUI.CustomTkinterWidgets as ctk
 import pytribeam.GUI.config_ui.lookup as lut
+
+
+class Popup:
+    def __init__(self, master=None, title="Popup", message=""):
+        if master is None:
+            master = tk._get_default_root()
+        bg = master.cget("bg")
+        fg = ctk.calc_font_color(bg)
+
+        self.root = tk.Toplevel(master)
+        self.root.minsize(200, 70)
+        self.root.resizable(False, False)
+        self.root.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.root.title(title)
+        self.root.update_idletasks()
+        self.root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=1)
+        self.root.config(bg=bg)
+
+        width = int(max(map(len, message.split("\n"))) * 1.1)
+        height = message.count("\n") + 1
+        self.text = tk.Text(
+            self.root,
+            bg=bg,
+            fg=fg,
+            height=height,
+            width=width,
+            highlightthickness=0,
+            bd=0,
+            selectbackground="orange",
+            font=ctk.FONT,
+            padx=10,
+            pady=10,
+        )
+        self.text.insert("end", message)
+        self.text.config(state="disabled")
+        self.text.tag_config("tag", justify="left")
+        self.text.tag_add("tag", "1.0", tk.END)
+        self.text.pack()
+
+        self.b = ctk.Button(
+            self.root, text="OK", command=self.destroy, bg=bg, fg=fg, width=width // 2
+        )
+        self.b.pack(side="right")
+
+        self.root.grab_set()
+        self.root.mainloop()
+
+    def destroy(self):
+        self.root.quit()
+        self.root.destroy()
 
 
 class Configurator:
@@ -122,6 +172,11 @@ class Configurator:
             font=ctk.MENU_FONT,
             # bg=self.theme.bg,
             activebackground=self.theme.accent1,
+        )
+        microscope_menu.add_command(
+            label="View position & WD's",
+            command=self.show_stage_position,
+            font=ctk.MENU_FONT,
         )
         microscope_menu.add_command(
             label="Import stage position...",
@@ -256,12 +311,73 @@ class Configurator:
         """Function called when the yaml version is updated."""
         self._update_editor()
 
+    def _create_microscope_connection(self):
+        status, general_set = self.validate_general(return_config=True, suppress=True)
+        if status:
+            host = general_set["general"]["connection_host"]
+            port = general_set["general"]["connection_port"]
+        else:
+            host = "localhost"
+            port = ""
+        try:
+            Microscope = tbt.Microscope()
+            ut.connect_microscope(
+                Microscope,
+                quiet_output=True,
+                connection_host=host,
+                connection_port=port,
+            )
+        except ConnectionError as e:
+            messagebox.showerror(
+                parent=self.toplevel,
+                title="ConnectionError",
+                message=e,
+            )
+            return None
+        return Microscope
+
     def update_title(self):
         """Update the title of the app window based on the current yaml file."""
         if self.YAML_PATH is None:
             self.toplevel.title("TriBeam Configurator - Untitled")
         else:
             self.toplevel.title(f"TriBeam Configurator - {self.YAML_PATH}")
+
+    def show_stage_position(self):
+        # Get the current position from the microscope
+        Microscope = self._create_microscope_connection()
+        if Microscope is None:
+            return
+        current_position = factory.active_stage_position_settings(Microscope)
+        eWD = (
+            ut.beam_type(
+                tbt.ElectronBeam(tbt.BeamSettings()), Microscope
+            ).working_distance.value
+            * Conversions.M_TO_MM
+        )
+        iWD = (
+            ut.beam_type(
+                tbt.IonBeam(tbt.BeamSettings()), Microscope
+            ).working_distance.value
+            * Conversions.M_TO_MM
+        )
+        ut.disconnect_microscope(Microscope)
+        message = (
+            f"EBeam WD = {eWD:.5f} mm\n"
+            + f" IBeam WD = {iWD:.5f} mm\n"
+            + f"\t X = {current_position.x_mm:.5f} mm\n"
+            + f"\t Y = {current_position.y_mm:.5f} mm\n"
+            + f"\t Z = {current_position.z_mm:.5f} mm\n"
+            + f"\t R = {current_position.r_deg:.5f} °\n"
+            + f"\t T = {current_position.t_deg:.5f} °"
+        )
+        # Present it as a messagebox
+        Popup(
+            master=self.toplevel,
+            title="Current stage position",
+            message=message,
+        )
+        return
 
     def update_step_imaging_from_scope(self):
         """Update the imaging settings of the current step based on the current microscope settings."""
@@ -272,108 +388,83 @@ class Configurator:
                 message=f"{self.STEP} step does not have imaging settings.",
             )
             return
-        status, general_set = self.validate_general(return_config=True, suppress=True)
-        if not status:
+        Microscope = self._create_microscope_connection()
+        if Microscope is None:
             return
-        general_set = general_set["general"]
-        Microscope = tbt.Microscope()
-        ut.connect_microscope(
-            Microscope,
-            quiet_output=True,
-            connection_host=general_set["connection_host"],
-            connection_port=general_set["connection_port"],
-        )
         # Get the settings
         imaging_settings = factory.active_image_settings(Microscope)
         # Disconnect the microscope
         ut.disconnect_microscope(Microscope)
         # First set the beam type (special case)
-        # key = get_key(["beam", "type"], self.CONFIG[self.STEP_INDEX])
-        value = imaging_settings.beam.__getattribute__("type").value
+        beam_type = imaging_settings.beam.__getattribute__("type").value
         # If this is a fib step, we check if the beam is ion, if not, we raise a warning and abort
-        if self.STEP == "fib" and value != "ion":
+        if self.STEP == "fib" and beam_type != "ion":
             messagebox.showerror(
                 parent=self.toplevel,
                 title="Error",
                 message="Importing imaging conditions for a FIB step requires the active beam to be an ion beam.",
             )
             return
-        # If it is a fib step, copy imaging conditions to the mill setting
+        # Image steps do not have a parent key (the step is the parent key), but FIB steps have imaging parameters within an Image and Mill parent
+        # For image steps, we just use the keys to the specific parameter (i.e. beam/type), but with the FIB we have to pass the parent (i.e. image/beam/type)
+        # Since FIB also shares parameters between milling and imaging, we iterate twice to fill both parents
+        # Note that milling does not have detector or scan parameters, so those are only updated for the image.
         if self.STEP == "fib":
-            self.CONFIG[self.STEP_INDEX]["mill/beam/type"] = _check_value_type(
-                value, str
+            parent_keys = ["mill/", "image/"]
+        else:
+            parent_keys = [""]
+        for pkey in parent_keys:
+            self.CONFIG[self.STEP_INDEX][f"{pkey}beam/type"] = _check_value_type(
+                beam_type, str
             )
-            self.CONFIG[self.STEP_INDEX]["mill/beam/voltage_kv"] = _check_value_type(
+            self.CONFIG[self.STEP_INDEX][f"{pkey}beam/voltage_kv"] = _check_value_type(
                 imaging_settings.beam.settings.voltage_kv, float
             )
-            self.CONFIG[self.STEP_INDEX]["mill/beam/current_na"] = _check_value_type(
+            self.CONFIG[self.STEP_INDEX][f"{pkey}beam/current_na"] = _check_value_type(
                 imaging_settings.beam.settings.current_na, float
             )
-            self.CONFIG[self.STEP_INDEX]["mill/beam/voltage_tol_kv"] = (
+            self.CONFIG[self.STEP_INDEX][f"{pkey}beam/voltage_tol_kv"] = (
                 _check_value_type(imaging_settings.beam.settings.voltage_tol_kv, float)
             )
-            self.CONFIG[self.STEP_INDEX]["mill/beam/current_tol_na"] = (
+            self.CONFIG[self.STEP_INDEX][f"{pkey}beam/current_tol_na"] = (
                 _check_value_type(imaging_settings.beam.settings.current_tol_na, float)
             )
-            self.CONFIG[self.STEP_INDEX]["mill/beam/hfw_mm"] = _check_value_type(
+            self.CONFIG[self.STEP_INDEX][f"{pkey}beam/hfw_mm"] = _check_value_type(
                 imaging_settings.beam.settings.hfw_mm, float
             )
-            self.CONFIG[self.STEP_INDEX]["mill/beam/working_dist_mm"] = (
+            self.CONFIG[self.STEP_INDEX][f"{pkey}beam/working_dist_mm"] = (
                 _check_value_type(imaging_settings.beam.settings.working_dist_mm, float)
             )
-        # Do beam stuff
-        # fib steps contain a nested "image" subdictionary that should be filled
-        # identically to a conventional "image" step
-        if self.STEP == "fib":
-            prefix = "image/"
-        elif self.STEP == "image":
-            prefix = ""
-        self.CONFIG[self.STEP_INDEX][f"{prefix}beam/type"] = _check_value_type(value, str)
-        self.CONFIG[self.STEP_INDEX][f"{prefix}beam/voltage_kv"] = _check_value_type(
-            imaging_settings.beam.settings.voltage_kv, float
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}beam/current_na"] = _check_value_type(
-            imaging_settings.beam.settings.current_na, float
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}beam/voltage_tol_kv"] = _check_value_type(
-            imaging_settings.beam.settings.voltage_tol_kv, float
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}beam/current_tol_na"] = _check_value_type(
-            imaging_settings.beam.settings.current_tol_na, float
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}beam/hfw_mm"] = _check_value_type(
-            imaging_settings.beam.settings.hfw_mm, float
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}beam/working_dist_mm"] = _check_value_type(
-            imaging_settings.beam.settings.working_dist_mm, float
-        )
-        # Now set the detector settings
-        self.CONFIG[self.STEP_INDEX][f"{prefix}detector/type"] = _check_value_type(
-            imaging_settings.detector.type, str
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}detector/mode"] = _check_value_type(
-            imaging_settings.detector.mode, str
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}detector/brightness"] = _check_value_type(
-            imaging_settings.detector.brightness, float
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}detector/contrast"] = _check_value_type(
-            imaging_settings.detector.contrast, float
-        )
-        # Now the scan settings
-        self.CONFIG[self.STEP_INDEX][f"{prefix}scan/rotation_deg"] = _check_value_type(
-            imaging_settings.scan.rotation_deg, float
-        )
-        self.CONFIG[self.STEP_INDEX][f"{prefix}scan/dwell_time_us"] = _check_value_type(
-            imaging_settings.scan.dwell_time_us, float
-        )
-        value = imaging_settings.scan.__getattribute__("resolution")
-        value = _check_value_type(f"{value.width}x{value.height}", str)
-        self.CONFIG[self.STEP_INDEX][f"{prefix}scan/resolution"] = value
-        # Last is the bit depth
-        self.CONFIG[self.STEP_INDEX][f"{prefix}bit_depth"] = _check_value_type(
-            imaging_settings.bit_depth, int
-        )
+            if "mill" not in pkey:
+                # Now set the detector settings
+                self.CONFIG[self.STEP_INDEX][f"{pkey}detector/type"] = (
+                    _check_value_type(imaging_settings.detector.type, str)
+                )
+                self.CONFIG[self.STEP_INDEX][f"{pkey}detector/mode"] = (
+                    _check_value_type(imaging_settings.detector.mode, str)
+                )
+                self.CONFIG[self.STEP_INDEX][f"{pkey}detector/brightness"] = (
+                    _check_value_type(imaging_settings.detector.brightness, float)
+                )
+                self.CONFIG[self.STEP_INDEX][f"{pkey}detector/contrast"] = (
+                    _check_value_type(imaging_settings.detector.contrast, float)
+                )
+                # Now the scan settings
+                self.CONFIG[self.STEP_INDEX][f"{pkey}scan/rotation_deg"] = (
+                    _check_value_type(imaging_settings.scan.rotation_deg, float)
+                )
+                self.CONFIG[self.STEP_INDEX][f"{pkey}scan/dwell_time_us"] = (
+                    _check_value_type(imaging_settings.scan.dwell_time_us, float)
+                )
+                resolution = imaging_settings.scan.__getattribute__("resolution")
+                resolution = _check_value_type(
+                    f"{resolution.width}x{resolution.height}", str
+                )
+                self.CONFIG[self.STEP_INDEX][f"{pkey}scan/resolution"] = resolution
+                # Last is the bit depth
+                self.CONFIG[self.STEP_INDEX][f"{pkey}bit_depth"] = _check_value_type(
+                    imaging_settings.bit_depth, int
+                )
         # Update the editor
         self._update_editor()
 
@@ -386,19 +477,10 @@ class Configurator:
                 message="General step does not have a stage position.",
             )
             return
-        status, general_set = self.validate_general(return_config=True, suppress=True)
-        if not status:
+        Microscope = self._create_microscope_connection()
+        if Microscope is None:
             return
-        general_set = general_set["general"]
-        Microscope = tbt.Microscope()
-        ut.connect_microscope(
-            Microscope,
-            quiet_output=True,
-            connection_host=general_set["connection_host"],
-            connection_port=general_set["connection_port"],
-        )
         current_position = factory.active_stage_position_settings(Microscope)
-        # Disconnect the microscope
         ut.disconnect_microscope(Microscope)
         # Put the current position in the step
         self.CONFIG[self.STEP_INDEX]["step_general/stage/initial_position/x_mm"] = (
@@ -430,18 +512,7 @@ class Configurator:
             )
             return
 
-        # Get the laser settings from the microscope, which first requires a microscope connection
-        status, general_set = self.validate_general(return_config=True, suppress=True)
-        if not status:
-            return
-        general_set = general_set["general"]
-        Microscope = tbt.Microscope()
-        ut.connect_microscope(
-            Microscope,
-            quiet_output=True,
-            connection_host=general_set["connection_host"],
-            connection_port=general_set["connection_port"],
-        )
+        # Try and grab the laser settings, stopping if errors show up.
         try:
             laser_state = factory.active_laser_state()
         except Exception as e:
@@ -451,7 +522,6 @@ class Configurator:
                 message=f"Error getting laser state: {e}",
             )
             return
-        ut.disconnect_microscope(Microscope)
 
         # Convert the laser state to a dictionary
         laser_state = laser.laser_state_to_db(laser_state)
@@ -461,22 +531,43 @@ class Configurator:
             if laser_state[key] is None:
                 laser_state[key] = ""
 
-        #TODO clear out only necessary sections, not the whole thing
-        # Empty the current laser db
-        # for key in self.CONFIG[self.STEP_INDEX].keys():
-        #     self.CONFIG[self.STEP_INDEX][key] = ""
+        # Update pulse parameters
+        keys = ["wavelength_nm", "pulse_divider", "pulse_energy_uj"]
+        for key in keys:
+            self.CONFIG[self.STEP_INDEX][f"pulse/{key}"] = laser_state[key]
 
-        # Pass the laser state values to the config file
-        self.CONFIG[self.STEP_INDEX]["pulse/wavelength_nm"] = laser_state[
-            "wavelength_nm"
-        ]
-        self.CONFIG[self.STEP_INDEX]["pulse/divider"] = laser_state["pulse_divider"]
-        self.CONFIG[self.STEP_INDEX]["pulse/energy_uj"] = laser_state["pulse_energy_uj"]
+        # Update pattern geometry based on type
+        if laser_state["geometry_type"] == "line":
+            keys = ["passes", "size_um", "pitch_um", "laser_scan_type"]
+            for key in keys:
+                self.CONFIG[self.STEP_INDEX][f"pattern/type/line/{key}"] = laser_state[
+                    key
+                ]
+        elif laser_state["geometry_type"] == "box":
+            keys = [
+                "passes",
+                "size_x_um",
+                "size_y_um",
+                "pitch_x_um",
+                "pitch_y_um",
+                "laser_scan_type",
+            ]
+            for key in keys:
+                self.CONFIG[self.STEP_INDEX][f"pattern/type/box/{key}"] = laser_state[
+                    key
+                ]
+            self.CONFIG[self.STEP_INDEX]["pattern/type/box/coordinate_ref"] = (
+                laser_state["coordinate_ref"].value
+            )
+
+        # Update beam shift
+        self.CONFIG[self.STEP_INDEX]["beam_shift/x_um"] = laser_state["beam_shift_um_x"]
+        self.CONFIG[self.STEP_INDEX]["beam_shift/y_um"] = laser_state["beam_shift_um_y"]
+
+        # Update special cases (such as naming is different between the two dictionaries)
         self.CONFIG[self.STEP_INDEX]["objective_position_mm"] = laser_state[
             "objective_position_mm"
         ]
-        self.CONFIG[self.STEP_INDEX]["beam_shift/x_um"] = laser_state["beam_shift_um_x"]
-        self.CONFIG[self.STEP_INDEX]["beam_shift/y_um"] = laser_state["beam_shift_um_y"]
         self.CONFIG[self.STEP_INDEX]["pattern/mode"] = laser_state["laser_pattern_mode"]
         self.CONFIG[self.STEP_INDEX]["pattern/rotation_deg"] = laser_state[
             "laser_pattern_rotation_deg"
@@ -487,41 +578,6 @@ class Configurator:
         self.CONFIG[self.STEP_INDEX]["pattern/pixel_dwell_ms"] = laser_state[
             "laser_pattern_pixel_dwell_ms"
         ]
-        if laser_state["geometry_type"] == "line":
-            self.CONFIG[self.STEP_INDEX]["pattern/type/line/passes"] = laser_state[
-                "passes"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/line/size_um"] = laser_state[
-                "size_um"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/line/pitch_um"] = laser_state[
-                "pitch_um"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/line/scan_type"] = laser_state[
-                "laser_scan_type"
-            ]
-        elif laser_state["geometry_type"] == "box":
-            self.CONFIG[self.STEP_INDEX]["pattern/type/box/passes"] = laser_state[
-                "passes"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/box/size_x_um"] = laser_state[
-                "size_x_um"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/box/size_y_um"] = laser_state[
-                "size_y_um"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/box/pitch_x_um"] = laser_state[
-                "pitch_x_um"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/box/pitch_y_um"] = laser_state[
-                "pitch_y_um"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/box/scan_type"] = laser_state[
-                "laser_scan_type"
-            ]
-            self.CONFIG[self.STEP_INDEX]["pattern/type/box/coordinate_ref"] = (
-                laser_state["coordinate_ref"].value
-            )
 
         # Update the editor
         self._update_editor()
@@ -813,7 +869,10 @@ class Configurator:
                     f"{i}. {v['step_general/step_name']} ({v['step_general/step_type']})"
                 )
         # Get the maximum row of the current pipeline
-        _, row = self.pipeline.grid_size()
+        try:
+            _, row = self.pipeline.grid_size()
+        except tk.TclError:
+            return
         # Loop over the options and update the pipeline
         for i, option in enumerate(options):
             row_i = i + 2
@@ -1320,7 +1379,7 @@ class Configurator:
                 message=message,
             )
             return True
-        elif not success:
+        elif not success and not suppress:
             messagebox.showerror(
                 parent=self.toplevel,
                 title="Schema check completed unsuccessfully",
