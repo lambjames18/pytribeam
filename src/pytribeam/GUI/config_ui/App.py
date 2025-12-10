@@ -11,6 +11,12 @@ from pytribeam.constants import Conversions
 import pytribeam.GUI.CustomTkinterWidgets as ctk
 import pytribeam.GUI.config_ui.lookup as lut
 
+# Import refactored modules
+from pytribeam.GUI.common import AppResources
+from pytribeam.GUI.config_ui.pipeline_model import flatten_dict, unflatten_dict
+from pytribeam.GUI.config_ui.microscope_interface import MicroscopeInterface, format_stage_info
+from pytribeam.GUI.config_ui.validator import ConfigValidator
+
 
 class Popup:
     def __init__(self, master=None, title="Popup", message=""):
@@ -71,13 +77,13 @@ class Configurator:
             self.master, background=self.theme.bg, *args, **kwargs
         )
 
+        # Initialize resources
+        self.resources = AppResources.from_module_file(__file__)
+
         # Set app title, icon, size and grid structure
         self.YAML_PATH = yml_path
         self.update_title()
-        ico_path = Path(__file__).parent.parent.parent.parent.parent.joinpath(
-            "docs", "userguide", "src", "logos", "logo_color_alt.ico"
-        )
-        self.toplevel.iconbitmap(ico_path)
+        self.toplevel.iconbitmap(self.resources.icon_path)
         self.toplevel.geometry("1000x700")
         self.toplevel.update_idletasks()
         self.toplevel.rowconfigure(0, weight=1)
@@ -312,6 +318,7 @@ class Configurator:
         self._update_editor()
 
     def _create_microscope_connection(self):
+        """Create microscope interface with connection settings from config."""
         status, general_set = self.validate_general(return_config=True, suppress=True)
         if status:
             host = general_set["general"]["connection_host"]
@@ -319,22 +326,18 @@ class Configurator:
         else:
             host = "localhost"
             port = ""
+
+        interface = MicroscopeInterface(host=host, port=port)
         try:
-            Microscope = tbt.Microscope()
-            ut.connect_microscope(
-                Microscope,
-                quiet_output=True,
-                connection_host=host,
-                connection_port=port,
-            )
-        except ConnectionError as e:
+            interface.connect()
+        except Exception as e:
             messagebox.showerror(
                 parent=self.toplevel,
                 title="ConnectionError",
-                message=e,
+                message=str(e),
             )
             return None
-        return Microscope
+        return interface
 
     def update_title(self):
         """Update the title of the app window based on the current yaml file."""
@@ -344,40 +347,30 @@ class Configurator:
             self.toplevel.title(f"TriBeam Configurator - {self.YAML_PATH}")
 
     def show_stage_position(self):
-        # Get the current position from the microscope
-        Microscope = self._create_microscope_connection()
-        if Microscope is None:
+        """Display current stage position and working distances."""
+        interface = self._create_microscope_connection()
+        if interface is None:
             return
-        current_position = factory.active_stage_position_settings(Microscope)
-        eWD = (
-            ut.beam_type(
-                tbt.ElectronBeam(tbt.BeamSettings()), Microscope
-            ).working_distance.value
-            * Conversions.M_TO_MM
-        )
-        iWD = (
-            ut.beam_type(
-                tbt.IonBeam(tbt.BeamSettings()), Microscope
-            ).working_distance.value
-            * Conversions.M_TO_MM
-        )
-        ut.disconnect_microscope(Microscope)
-        message = (
-            f"EBeam WD = {eWD:.5f} mm\n"
-            + f" IBeam WD = {iWD:.5f} mm\n"
-            + f"\t X = {current_position.x_mm:.5f} mm\n"
-            + f"\t Y = {current_position.y_mm:.5f} mm\n"
-            + f"\t Z = {current_position.z_mm:.5f} mm\n"
-            + f"\t R = {current_position.r_deg:.5f} °\n"
-            + f"\t T = {current_position.t_deg:.5f} °"
-        )
-        # Present it as a messagebox
+
+        try:
+            stage_info = interface.get_stage_info()
+            message = format_stage_info(stage_info)
+        except Exception as e:
+            messagebox.showerror(
+                parent=self.toplevel,
+                title="Error",
+                message=f"Failed to get stage position: {e}",
+            )
+            return
+        finally:
+            interface.disconnect()
+
+        # Present it as a popup
         Popup(
             master=self.toplevel,
             title="Current stage position",
             message=message,
         )
-        return
 
     def update_step_imaging_from_scope(self):
         """Update the imaging settings of the current step based on the current microscope settings."""
@@ -388,13 +381,23 @@ class Configurator:
                 message=f"{self.STEP} step does not have imaging settings.",
             )
             return
-        Microscope = self._create_microscope_connection()
-        if Microscope is None:
+
+        interface = self._create_microscope_connection()
+        if interface is None:
             return
-        # Get the settings
-        imaging_settings = factory.active_image_settings(Microscope)
-        # Disconnect the microscope
-        ut.disconnect_microscope(Microscope)
+
+        try:
+            # Get the settings
+            imaging_settings = interface.get_imaging_settings()
+        except Exception as e:
+            messagebox.showerror(
+                parent=self.toplevel,
+                title="Error",
+                message=f"Failed to get imaging settings: {e}",
+            )
+            return
+        finally:
+            interface.disconnect()
         # First set the beam type (special case)
         beam_type = imaging_settings.beam.__getattribute__("type").value
         # If this is a fib step, we check if the beam is ion, if not, we raise a warning and abort
@@ -477,11 +480,22 @@ class Configurator:
                 message="General step does not have a stage position.",
             )
             return
-        Microscope = self._create_microscope_connection()
-        if Microscope is None:
+
+        interface = self._create_microscope_connection()
+        if interface is None:
             return
-        current_position = factory.active_stage_position_settings(Microscope)
-        ut.disconnect_microscope(Microscope)
+
+        try:
+            current_position = interface.get_stage_position()
+        except Exception as e:
+            messagebox.showerror(
+                parent=self.toplevel,
+                title="Error",
+                message=f"Failed to get stage position: {e}",
+            )
+            return
+        finally:
+            interface.disconnect()
         # Put the current position in the step
         self.CONFIG[self.STEP_INDEX]["step_general/stage/initial_position/x_mm"] = (
             _check_value_type(current_position.x_mm, float)
@@ -513,8 +527,9 @@ class Configurator:
             return
 
         # Try and grab the laser settings, stopping if errors show up.
+        interface = self._create_microscope_connection()
         try:
-            laser_state = factory.active_laser_state()
+            laser_state = interface.get_laser_state()
         except Exception as e:
             messagebox.showerror(
                 parent=self.toplevel,
@@ -522,9 +537,9 @@ class Configurator:
                 message=f"Error getting laser state: {e}",
             )
             return
-
-        # Convert the laser state to a dictionary
-        laser_state = laser.laser_state_to_db(laser_state)
+        finally:
+            if interface:
+                interface.disconnect()
 
         # Make any NoneType values into empty strings
         for key in laser_state.keys():
@@ -1409,30 +1424,7 @@ def _check_value_type(value, dtype):
         return dtype(value)
 
 
-def flatten_dict(d, parent_key="", sep="/"):
-    """Takes a nested dictionary and flattens it to a single level dictionary.
-    Nested keys are combined using a separator.
-    A parent key can be passed in to add to the beginning of all keys."""
-    items = []
-    for k, v in d.items():
-        new_key = parent_key + sep + k if parent_key else k
-        try:
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        except:
-            items.append((new_key, v))
-    return dict(items)
-
-
-def unflatten_dict(d, sep="/"):
-    """Takes a flattened dictionary and unflattens it to a nested dictionary."""
-    items = {}
-    for k, v in d.items():
-        keys = k.split(sep)
-        sub_items = items
-        for key in keys[:-1]:
-            sub_items = sub_items.setdefault(key, {})
-        sub_items[keys[-1]] = v
-    return items
+# Note: flatten_dict and unflatten_dict are now imported from pipeline_model
 
 
 def get_key(keywords, dictionary):
