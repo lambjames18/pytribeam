@@ -9,7 +9,7 @@ import datetime
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, Tuple, List
 
 import pytribeam.types as tbt
 from pytribeam import workflow, stage, insertable_devices
@@ -73,7 +73,7 @@ class ExperimentController:
         self.state = ExperimentState()
         self._callbacks: Dict[str, Callable] = {}
         self._thread: Optional[StoppableThread] = None
-        self._slice_times: list[float] = []
+        self._slice_times: List[float] = []
 
     def set_config_path(self, path: Path):
         """Set or update configuration file path.
@@ -107,7 +107,9 @@ class ExperimentController:
                 # Don't let callback errors crash the controller
                 print(f"Error in callback '{event}': {e}")
 
-    def validate_config(self) -> tuple[bool, Optional[tbt.ExperimentSettings], Optional[str]]:
+    def validate_config(
+        self,
+    ) -> Tuple[bool, Optional[tbt.ExperimentSettings], Optional[str]]:
         """Validate the current configuration file.
 
         Returns:
@@ -117,7 +119,8 @@ class ExperimentController:
             return False, None, "No configuration file loaded"
 
         try:
-            experiment_settings = workflow.pre_flight_check(self.config_path)
+            experiment_settings = workflow.setup_experiment(self.config_path)
+            # experiment_settings = workflow.pre_flight_check(self.config_path)
             return True, experiment_settings, None
         except Exception as e:
             return False, None, f"Validation failed: {e}"
@@ -137,13 +140,13 @@ class ExperimentController:
             True if experiment started successfully, False otherwise
         """
         if self.state.is_running:
-            self._notify('error', "Experiment is already running")
+            self._notify("error", "Experiment is already running")
             return False
 
         # Validate configuration
         is_valid, experiment_settings, error = self.validate_config()
         if not is_valid:
-            self._notify('validation_failed', error)
+            self._notify("validation_failed", error)
             return False
 
         # Reset stop flags
@@ -162,7 +165,9 @@ class ExperimentController:
             starting_step_idx = step_names.index(starting_step)
 
         # Notify experiment start
-        self._notify('experiment_started', experiment_settings, starting_slice, starting_step_idx)
+        self._notify(
+            "experiment_started", experiment_settings, starting_slice, starting_step_idx
+        )
 
         # Run experiment in thread (non-blocking)
         self._run_experiment_loop(
@@ -179,7 +184,7 @@ class ExperimentController:
         experiment_settings: tbt.ExperimentSettings,
         starting_slice: int,
         starting_step_idx: int,
-        step_names: list[str],
+        step_names: List[str],
     ):
         """Execute the main experiment loop.
 
@@ -204,7 +209,7 @@ class ExperimentController:
                 # Track slice start time
                 slice_start = time.time()
                 self.state.current_slice = i
-                self._notify('state_changed', self.state)
+                self._notify("state_changed", self.state)
 
                 for j in range(num_steps):
                     # Skip steps if starting mid-slice
@@ -216,7 +221,7 @@ class ExperimentController:
 
                     # Update current step
                     self.state.current_step = step_names[j]
-                    self._notify('state_changed', self.state)
+                    self._notify("state_changed", self.state)
 
                     # Execute step
                     success = self._execute_step(i, j + 1, experiment_settings)
@@ -232,7 +237,11 @@ class ExperimentController:
                         break
 
                 # Check stop conditions
-                if self.state.should_stop_step or self.state.should_stop_slice or self.state.should_stop_now:
+                if (
+                    self.state.should_stop_step
+                    or self.state.should_stop_slice
+                    or self.state.should_stop_now
+                ):
                     break
 
                 # Update timing stats
@@ -241,9 +250,11 @@ class ExperimentController:
                 self._update_timing_stats(i, ending_slice)
 
         except KeyboardInterrupt:
-            self._notify('experiment_interrupted')
+            self._notify("experiment_interrupted")
         finally:
-            self._cleanup_experiment(experiment_settings, i, j if 'j' in locals() else 0, num_steps)
+            self._cleanup_experiment(
+                experiment_settings, i, j if "j" in locals() else 0, num_steps
+            )
 
     def _execute_step(
         self,
@@ -268,7 +279,9 @@ class ExperimentController:
             self._try_stop_stage(experiment_settings.microscope)
             return False
         except Exception as e:
-            print(f"Unexpected error in step {step_index} of slice {slice_number}: {e.__class__.__name__}: {e}")
+            print(
+                f"Unexpected error in step {step_index} of slice {slice_number}: {e.__class__.__name__}: {e}"
+            )
             self._log_error(e, slice_number, step_index)
             self._try_stop_stage(experiment_settings.microscope)
             return False
@@ -304,7 +317,9 @@ class ExperimentController:
 
         print(f"Error details saved to: {err_path}")
 
-    def _update_progress(self, slice_num: int, step_num: int, total_slices: int, total_steps: int):
+    def _update_progress(
+        self, slice_num: int, step_num: int, total_slices: int, total_steps: int
+    ):
         """Update progress percentage.
 
         Args:
@@ -316,7 +331,7 @@ class ExperimentController:
         completed_steps = (slice_num - 1) * total_steps + step_num
         total_work = total_slices * total_steps
         self.state.progress_percent = int((completed_steps / total_work) * 100)
-        self._notify('state_changed', self.state)
+        self._notify("state_changed", self.state)
 
     def _update_timing_stats(self, current_slice: int, total_slices: int):
         """Update timing statistics.
@@ -333,8 +348,10 @@ class ExperimentController:
         remaining_time = avg_time * remaining_slices
 
         self.state.avg_slice_time_str = str(datetime.timedelta(seconds=int(avg_time)))
-        self.state.remaining_time_str = str(datetime.timedelta(seconds=int(remaining_time)))
-        self._notify('state_changed', self.state)
+        self.state.remaining_time_str = str(
+            datetime.timedelta(seconds=int(remaining_time))
+        )
+        self._notify("state_changed", self.state)
 
     def _cleanup_experiment(
         self,
@@ -369,9 +386,9 @@ class ExperimentController:
 
         # Notify completion
         if final_slice == self.state.total_slices and final_step == total_steps - 1:
-            self._notify('experiment_completed')
+            self._notify("experiment_completed")
         else:
-            self._notify('experiment_stopped', final_slice, final_step)
+            self._notify("experiment_stopped", final_slice, final_step)
 
     def request_stop_after_step(self):
         """Request experiment stop after current step completes."""
@@ -379,7 +396,7 @@ class ExperimentController:
             return
 
         self.state.should_stop_step = True
-        self._notify('stop_requested', 'step')
+        self._notify("stop_requested", "step")
         print("-----> Stopping after current step")
 
     def request_stop_after_slice(self):
@@ -388,7 +405,7 @@ class ExperimentController:
             return
 
         self.state.should_stop_slice = True
-        self._notify('stop_requested', 'slice')
+        self._notify("stop_requested", "slice")
         print("-----> Stopping after current slice")
 
     def request_stop_now(self):
@@ -397,7 +414,7 @@ class ExperimentController:
             return
 
         self.state.should_stop_now = True
-        self._notify('stop_requested', 'now')
+        self._notify("stop_requested", "now")
         print("-----> Experiment stopped immediately by user")
 
         # Try to interrupt hardware

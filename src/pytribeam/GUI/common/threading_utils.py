@@ -272,6 +272,13 @@ class TextRedirector:
         if autoscroll and bottom == 1:
             self.widget.see(tk.END)
 
+        # Force GUI update to show text immediately
+        try:
+            self.widget.update_idletasks()
+        except tk.TclError:
+            # Widget may have been destroyed
+            pass
+
         # Write to log file
         if self.log_path is not None:
             with open(self.log_path, "a") as f:

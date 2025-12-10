@@ -26,6 +26,7 @@ from pytribeam.GUI.common import (
     TextRedirector,
 )
 from pytribeam.GUI.common.threading_utils import generate_escape_keypress
+from pytribeam.GUI.runner import ExperimentController, ExperimentState
 
 
 class MainApplication(tk.Tk):
@@ -45,6 +46,14 @@ class MainApplication(tk.Tk):
         self.image_size = (self.image.size[0] // 3, self.image.size[1] // 3)
         self.image.thumbnail(self.image_size, Image.ANTIALIAS)
         self.image = ImageTk.PhotoImage(self.image)
+
+        # Set the taskbar icon (Windows only)
+        if os.name == "nt":
+            import ctypes
+
+            myappid = "pytribeam.tribeamlayeredacquisition"
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+            self.iconbitmap(self.resources.icon_path)
 
         # Set the window size
         self.frame_w = int(1200)
@@ -96,6 +105,26 @@ class MainApplication(tk.Tk):
         # Bind Ctrl+Shift+X to stop after step and Ctrl+X to stop after slice
         self.bind("<Control-X>", lambda e: self.stop_slice())
         self.bind("<Control-Shift-X>", lambda e: self.stop_step())
+
+        # Add experiment controller
+        self.experiment_controller = ExperimentController()
+
+        # Register callbacks for UI updates
+        self.experiment_controller.register_callback(
+            "state_changed", self._on_experiment_state_changed
+        )
+        self.experiment_controller.register_callback(
+            "experiment_started", self._on_experiment_started
+        )
+        self.experiment_controller.register_callback(
+            "experiment_completed", self._on_experiment_completed
+        )
+        self.experiment_controller.register_callback(
+            "experiment_stopped", self._on_experiment_stopped
+        )
+        self.experiment_controller.register_callback(
+            "validation_failed", self._on_validation_failed
+        )
 
     def _draw(self):
         self._create_menubar()
@@ -642,6 +671,8 @@ class MainApplication(tk.Tk):
             )
             return
 
+    # -------- Update GUI functions -------- #
+
     def _update_experiment_info(self):
         """Update the experiment information in the GUI from the current yaml file."""
         if self.config_path is None:
@@ -692,22 +723,57 @@ class MainApplication(tk.Tk):
         self.current_step.set(step_name)
         self.starting_step_var.set(step_name)
 
-    def run_in_thread(self, func, *args, **kwargs):
-        out_dict = {"error": False}
-        self.thread_obj = StoppableThread(
-            target=func, args=(out_dict,) + args, kwargs=kwargs
-        )
-        self.thread_obj.start()
-        while self.thread_obj.is_alive():
-            try:
-                self.update()
-            except tk.TclError:
-                return
-            if self.stop_now.get() and self.thread_obj.is_alive():
-                generate_escape_keypress()
-                self.thread_obj.raise_exception(KeyboardInterrupt)
-                break
-        return out_dict
+    def _update_exp_control_buttons(
+        self,
+        start="normal",
+        step="normal",
+        slice="normal",
+        hard="normal",
+        buttons="normal",
+    ):
+        """Update the experiment control buttons."""
+        start_kwards = {
+            "normal": {"state": "normal", "bg": self.theme.bg},
+            "disabled": {
+                "state": "disabled",
+                "bg": self.theme.green,
+                "disabledforeground": self.theme.bg,
+            },
+        }
+        step_kwargs = {
+            "normal": {"state": "normal", "bg": self.theme.bg},
+            "disabled": {
+                "state": "disabled",
+                "bg": self.theme.accent3,
+                "disabledforeground": self.theme.bg,
+            },
+        }
+        slice_kwargs = {
+            "normal": {"state": "normal", "bg": self.theme.bg},
+            "disabled": {
+                "state": "disabled",
+                "bg": self.theme.accent3,
+                "disabledforeground": self.theme.bg,
+            },
+        }
+        hard_kwargs = {
+            "normal": {"state": "normal", "bg": self.theme.bg},
+            "disabled": {
+                "state": "disabled",
+                "bg": self.theme.accent3,
+                "disabledforeground": self.theme.bg,
+            },
+        }
+        self.start_exp_b.config(**start_kwards[start])
+        self.stop_step_b.config(**step_kwargs[step])
+        self.stop_slice_b.config(**slice_kwargs[slice])
+        self.stop_now_b.config(**hard_kwargs[hard])
+        self.create_new_config_button.config({"state": buttons})
+        self.edit_config_button.config({"state": buttons})
+        self.load_config_button.config({"state": buttons})
+        self.update_idletasks()
+
+    # ------- Experiment control functions -------- #
 
     def start_experiment(self):
         """
@@ -724,6 +790,90 @@ class MainApplication(tk.Tk):
         The modified thread can raise a KeyboardInterrupt exception in the step function to
         stop the experiment.
         """
+        # Update controller with current config path
+        if self.config_path:
+            self.experiment_controller.set_config_path(self.config_path)
+
+        # Get starting position
+        starting_slice = self.starting_slice_var.get()
+        starting_step = self.starting_step_var.get()
+
+        # Start the experiment via the controller
+        success = self.experiment_controller.start_experiment(
+            starting_slice=starting_slice, starting_step=starting_step
+        )
+
+        if success:
+            self._update_exp_control_buttons(start="disabled", buttons="disabled")
+
+    # -------- Callbacks for experiment controller -------- #
+
+    def _on_experiment_state_changed(self, state: ExperimentState):
+        """Handle state updates from controller."""
+        # Update current slice/step displays
+        self.current_slice.set(str(state.current_slice))
+        self.current_step.set(state.current_step)
+
+        # Update progress
+        self.progress.set(state.progress_percent)
+
+        # Update timing
+        self.slice_time.set(state.avg_slice_time_str)
+        self.time_left.set(state.remaining_time_str)
+
+        # Update UI
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            pass
+
+    def _on_experiment_started(self, settings, start_slice, start_step):
+        """Handle experiment start."""
+        print(f"Starting experiment at slice {start_slice}, step {start_step}")
+
+    def _on_experiment_completed(self):
+        """Handle experiment completion."""
+        print("-----> Experiment complete <-----")
+        self._reset_starting_positions()
+        self._update_exp_control_buttons()
+
+    def _on_experiment_stopped(self, final_slice, final_step):
+        """Handle experiment stop."""
+        print("-----> Experiment stopped <-----")
+        # Update starting positions for resume
+        self.starting_slice_var.set(final_slice)
+        # ... update step ...
+        self._update_exp_control_buttons()
+
+    def _on_validation_failed(self, error_message):
+        """Handle validation failure."""
+        messagebox.showerror("Invalid config", error_message)
+        self._update_exp_control_buttons()
+
+    def stop_step(self):
+        """Request stop after step."""
+        self.experiment_controller.request_stop_after_step()
+        self._update_exp_control_buttons(
+            start="disabled", step="disabled", slice="disabled", hard="normal"
+        )
+
+    def stop_slice(self):
+        """Request stop after slice."""
+        self.experiment_controller.request_stop_after_slice()
+        self._update_exp_control_buttons(
+            start="disabled", step="normal", slice="disabled", hard="normal"
+        )
+
+    def stop_hard(self):
+        """Request immediate stop."""
+        self.experiment_controller.request_stop_now()
+        self._update_exp_control_buttons(
+            start="disabled", step="disabled", slice="disabled", hard="disabled"
+        )
+
+    # -------- Legacy experiment control functions (now handled by ExperimentController) -------- #
+
+    def start_experiment_old(self):
         # Set the start exp button to be disabled and green
         self._update_exp_control_buttons(start="disabled", buttons="disabled")
 
@@ -755,16 +905,13 @@ class MainApplication(tk.Tk):
 
         # Check if EBSD and EDS are enabled
         if not experiment_settings.enable_EBSD or not experiment_settings.enable_EDS:
-            pick = -1
-            if not experiment_settings.enable_EBSD:
-                pick += 1
-            if not experiment_settings.enable_EDS:
-                pick += 2
-            message_part1 = [
-                "EBSD is not enabled",
-                "EDS is not enabled",
-                "EBSD and EDS are not enabled",
-            ][pick]
+            if experiment_settings.enable_EBSD:
+                message_part1 = "EDS is not enabled"
+            elif experiment_settings.enable_EDS:
+                message_part1 = "EBSD is not enabled"
+            else:
+                message_part1 = "EBSD and EDS are not enabled"
+
             message_part2 = ", you will not have access to safety checking and these modalities during data collection. Please ensure these detectors are retracted before proceeding."
             messagebox.showwarning("Warning", message_part1 + message_part2)
 
@@ -883,57 +1030,24 @@ class MainApplication(tk.Tk):
         # Update the GUI
         self._update_exp_control_buttons()
 
-    def _update_exp_control_buttons(
-        self,
-        start="normal",
-        step="normal",
-        slice="normal",
-        hard="normal",
-        buttons="normal",
-    ):
-        """Update the experiment control buttons."""
-        start_kwards = {
-            "normal": {"state": "normal", "bg": self.theme.bg},
-            "disabled": {
-                "state": "disabled",
-                "bg": self.theme.green,
-                "disabledforeground": self.theme.bg,
-            },
-        }
-        step_kwargs = {
-            "normal": {"state": "normal", "bg": self.theme.bg},
-            "disabled": {
-                "state": "disabled",
-                "bg": self.theme.accent3,
-                "disabledforeground": self.theme.bg,
-            },
-        }
-        slice_kwargs = {
-            "normal": {"state": "normal", "bg": self.theme.bg},
-            "disabled": {
-                "state": "disabled",
-                "bg": self.theme.accent3,
-                "disabledforeground": self.theme.bg,
-            },
-        }
-        hard_kwargs = {
-            "normal": {"state": "normal", "bg": self.theme.bg},
-            "disabled": {
-                "state": "disabled",
-                "bg": self.theme.accent3,
-                "disabledforeground": self.theme.bg,
-            },
-        }
-        self.start_exp_b.config(**start_kwards[start])
-        self.stop_step_b.config(**step_kwargs[step])
-        self.stop_slice_b.config(**slice_kwargs[slice])
-        self.stop_now_b.config(**hard_kwargs[hard])
-        self.create_new_config_button.config({"state": buttons})
-        self.edit_config_button.config({"state": buttons})
-        self.load_config_button.config({"state": buttons})
-        self.update_idletasks()
+    def run_in_thread(self, func, *args, **kwargs):
+        out_dict = {"error": False}
+        self.thread_obj = StoppableThread(
+            target=func, args=(out_dict,) + args, kwargs=kwargs
+        )
+        self.thread_obj.start()
+        while self.thread_obj.is_alive():
+            try:
+                self.update()
+            except tk.TclError:
+                return
+            if self.stop_now.get() and self.thread_obj.is_alive():
+                generate_escape_keypress()
+                self.thread_obj.raise_exception(KeyboardInterrupt)
+                break
+        return out_dict
 
-    def stop_step(self):
+    def stop_step_old(self):
         """
         Stop the experiment after the current step is complete.
         This is an experiment control function that sets a flag to stop the experiment after the current step is complete.
@@ -950,7 +1064,7 @@ class MainApplication(tk.Tk):
             buttons="disabled",
         )
 
-    def stop_slice(self):
+    def stop_slice_old(self):
         """
         Stop the experiment after the current slice is complete.
         This is an experiment control function that sets a flag to stop the experiment after the current slice is complete.
@@ -967,7 +1081,7 @@ class MainApplication(tk.Tk):
             buttons="disabled",
         )
 
-    def stop_hard(self):
+    def stop_hard_old(self):
         """
         Stop the experiment immediately.
         This is an experiment control function that sets a flag to stop the experiment immediately.
