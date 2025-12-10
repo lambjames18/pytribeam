@@ -64,10 +64,12 @@ class MenuButton(tk.Menubutton):
         )
         self.menu = tk.Menu(self, **kw)
         self["menu"] = self.menu
+        self.options = options
         self.set_options(options, command)
 
     def set_options(self, options, command=None):
         """Set the options for the menubutton."""
+        self.options = options
         # Clear the menu
         self.menu.delete(0, tk.END)
         for opt in options:

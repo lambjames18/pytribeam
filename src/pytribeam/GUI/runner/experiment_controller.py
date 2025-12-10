@@ -176,7 +176,7 @@ class ExperimentController:
         self._thread = StoppableThread(
             target=self._run_experiment_loop,
             args=(experiment_settings, starting_slice, starting_step_idx, step_names),
-            name="ExperimentThread"
+            name="ExperimentThread",
         )
         self._thread.start()
 
@@ -406,6 +406,9 @@ class ExperimentController:
         except Exception as e:
             print(f"Warning: Failed to retract devices: {e}")
 
+        # Get whether or not last step was completed
+        is_step_completed = not self.state.should_stop_now
+
         # Update state
         self.state.is_running = False
         self.state.should_stop_step = False
@@ -416,7 +419,16 @@ class ExperimentController:
         if final_slice == self.state.total_slices and final_step == total_steps - 1:
             self._notify("experiment_completed")
         else:
-            self._notify("experiment_stopped", final_slice, final_step)
+            # If step is completed, move to next step for resume
+            if is_step_completed:
+                if final_step + 1 < total_steps:
+                    final_step += 1
+                else:
+                    final_slice += 1
+                    final_step = 0
+            # Convert to 1-based step name
+            final_step_name = experiment_settings.step_sequence[final_step].name
+            self._notify("experiment_stopped", final_slice, final_step_name)
 
     def request_stop_after_step(self):
         """Request experiment stop after current step completes."""

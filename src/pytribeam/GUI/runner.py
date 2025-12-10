@@ -776,6 +776,13 @@ class MainApplication(tk.Tk):
         self.load_config_button.config({"state": buttons})
         self.update_idletasks()
 
+    def _reset_starting_positions(self):
+        """Reset the starting slice and step to defaults."""
+        self.starting_slice_var.set(1)
+        step_names = self.starting_step.options
+        if step_names:
+            self.starting_step_var.set(step_names[0])
+
     # ------- Experiment control functions -------- #
 
     def start_experiment(self):
@@ -845,7 +852,7 @@ class MainApplication(tk.Tk):
         print("-----> Experiment stopped <-----")
         # Update starting positions for resume
         self.starting_slice_var.set(final_slice)
-        # ... update step ...
+        self.starting_step_var.set(final_step)
         self._update_exp_control_buttons()
 
     def _on_validation_failed(self, error_message):
