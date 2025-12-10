@@ -164,20 +164,48 @@ class ExperimentController:
         else:
             starting_step_idx = step_names.index(starting_step)
 
+        # Check EBSD/EDS detector status and warn user if needed
+        self._check_detector_warning(experiment_settings)
+
         # Notify experiment start
         self._notify(
             "experiment_started", experiment_settings, starting_slice, starting_step_idx
         )
 
-        # Run experiment in thread (non-blocking)
-        self._run_experiment_loop(
-            experiment_settings,
-            starting_slice,
-            starting_step_idx,
-            step_names,
+        # Run experiment in background thread (non-blocking)
+        self._thread = StoppableThread(
+            target=self._run_experiment_loop,
+            args=(experiment_settings, starting_slice, starting_step_idx, step_names),
+            name="ExperimentThread"
         )
+        self._thread.start()
 
         return True
+
+    def _check_detector_warning(self, experiment_settings: tbt.ExperimentSettings):
+        """Check EBSD/EDS detector status and notify UI if warning needed.
+
+        Args:
+            experiment_settings: Validated experiment settings
+        """
+        # Check if EBSD and EDS are enabled
+        if not experiment_settings.enable_EBSD or not experiment_settings.enable_EDS:
+            if experiment_settings.enable_EBSD:
+                message_part1 = "EDS is not enabled"
+            elif experiment_settings.enable_EDS:
+                message_part1 = "EBSD is not enabled"
+            else:
+                message_part1 = "EBSD and EDS are not enabled"
+
+            message_part2 = (
+                ", you will not have access to safety checking and these modalities "
+                "during data collection. Please ensure these detectors are retracted "
+                "before proceeding."
+            )
+            warning_message = message_part1 + message_part2
+
+            # Notify UI to show warning
+            self._notify("detector_warning", warning_message)
 
     def _run_experiment_loop(
         self,
