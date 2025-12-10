@@ -12,18 +12,15 @@ from PIL import Image, ImageTk
 import contextlib
 import traceback
 
-# Threading for controlling experiment stops
-import ctypes
-import inspect
-import threading
-
-# from multiprocessing.pool import ThreadPool
-
 # pytribeam imports
 import pytribeam.GUI.CustomTkinterWidgets as ctk
 from pytribeam.GUI.config_ui.App import Configurator
 from pytribeam import workflow, stage, utilities, log, laser, insertable_devices
 import pytribeam.types as tbt
+
+# Import refactored common utilities
+from pytribeam.GUI.common import AppResources, AppConfig, StoppableThread, TextRedirector
+from pytribeam.GUI.common.threading_utils import generate_escape_keypress
 
 
 class MainApplication(tk.Tk):
@@ -32,15 +29,14 @@ class MainApplication(tk.Tk):
         tk.Tk.__init__(self, *args, **kwargs)
         self.title("TriBeam Runner")
 
+        # Initialize resources and config
+        self.resources = AppResources.from_module_file(__file__)
+        self.app_config = AppConfig.from_env()
+        self.app_config.ensure_directories()
+
         # Get images
-        ico_path = Path(__file__).parent.parent.parent.parent.joinpath(
-            "docs", "userguide", "src", "logos", "logo_color_alt.ico"
-        )
-        self.iconbitmap(ico_path)
-        img_path = Path(__file__).parent.parent.parent.parent.joinpath(
-            "docs", "userguide", "src", "logos", "logo_color_dark.png"
-        )
-        self.image = Image.open(img_path)
+        self.iconbitmap(self.resources.icon_path)
+        self.image = Image.open(self.resources.logo_dark_path)
         self.image_size = (self.image.size[0] // 3, self.image.size[1] // 3)
         self.image.thumbnail(self.image_size, Image.ANTIALIAS)
         self.image = ImageTk.PhotoImage(self.image)
@@ -76,16 +72,12 @@ class MainApplication(tk.Tk):
         # Map stdout through decorator so that we get the stdout in the GUI and CLI
         self.original_out = sys.stdout
         self.original_err = sys.stderr
-        self.terminal_log_path = os.path.join(
-            os.getenv("LOCALAPPDATA"),
-            "pytribeam",
-            time.strftime("%Y%m%d-%H%M%S") + "_log.txt",
-        )
+        self.terminal_log_path = self.app_config.get_terminal_log_path()
         sys.stdout = TextRedirector(
-            self.terminal, tag="stdout", log_path=self.terminal_log_path
+            self.terminal, tag="stdout", log_path=str(self.terminal_log_path)
         )
         sys.stderr = TextRedirector(
-            self.terminal, tag="stderr", log_path=self.terminal_log_path
+            self.terminal, tag="stderr", log_path=str(self.terminal_log_path)
         )
         print("---")
         print("Welcome to TriBeam Layered Acquisition!")
@@ -492,14 +484,10 @@ class MainApplication(tk.Tk):
         """Change the theme of the app."""
         if self.theme.theme_type == "light":
             self.theme = ctk.Theme("dark")
-            img_path = Path(__file__).parent.parent.parent.parent.joinpath(
-                "docs", "userguide", "src", "logos", "logo_color_dark.png"
-            )
+            img_path = self.resources.logo_dark_path
         else:
             self.theme = ctk.Theme("light")
-            img_path = Path(__file__).parent.parent.parent.parent.joinpath(
-                "docs", "userguide", "src", "logo_color.png"
-            )
+            img_path = self.resources.logo_light_path
         # Update the root
         self.configure(bg=self.theme.bg)
 
@@ -534,10 +522,9 @@ class MainApplication(tk.Tk):
 
     def test_connections(self):
         """Test the connections to the EDS/EBSD and the laser."""
-        out = laser._device_connections()
         with WaitCursor(self):
             out_dict = {"result": None}
-            self.thread_obj = ThreadWithExc(
+            self.thread_obj = StoppableThread(
                 target=wrapper_for_output, args=(laser._device_connections, out_dict)
             )
             self.thread_obj.start()
@@ -617,7 +604,7 @@ class MainApplication(tk.Tk):
         try:
             with WaitCursor(self):
                 out_dict = {"result": None, "error": False}
-                self.thread_obj = ThreadWithExc(
+                self.thread_obj = StoppableThread(
                     target=wrapper_for_output,
                     args=(workflow.pre_flight_check, out_dict, self.config_path),
                 )
@@ -700,7 +687,7 @@ class MainApplication(tk.Tk):
 
     def run_in_thread(self, func, *args, **kwargs):
         out_dict = {"error": False}
-        self.thread_obj = ThreadWithExc(
+        self.thread_obj = StoppableThread(
             target=func, args=(out_dict,) + args, kwargs=kwargs
         )
         self.thread_obj.start()
@@ -710,8 +697,8 @@ class MainApplication(tk.Tk):
             except tk.TclError:
                 return
             if self.stop_now.get() and self.thread_obj.is_alive():
-                escape_call()
-                self.thread_obj.raise_exc(KeyboardInterrupt)
+                generate_escape_keypress()
+                self.thread_obj.raise_exception(KeyboardInterrupt)
                 break
         return out_dict
 
@@ -852,7 +839,7 @@ class MainApplication(tk.Tk):
                 "-----> Experiment was stopped immediately by user (keyboard interrupt)"
             )
             if self.thread_obj is not None and self.thread_obj.is_alive():
-                self.thread_obj.raise_exc(KeyboardInterrupt)
+                self.thread_obj.raise_exception(KeyboardInterrupt)
                 stop_now = True
 
         # Handle the end of the experiment
@@ -993,10 +980,7 @@ class MainApplication(tk.Tk):
         """Open the user guide in a web browser."""
         import webbrowser
 
-        path = Path(__file__).parent.parent.parent.parent.joinpath(
-            "docs", "userguide", "book", "index.html"
-        )
-        webbrowser.open(f"file://{path}")
+        webbrowser.open(f"file://{self.resources.user_guide_path}")
 
     def quit(self):
         """
@@ -1006,7 +990,7 @@ class MainApplication(tk.Tk):
         sys.stdout = self.original_out
         sys.stderr = self.original_err
         if self.thread_obj is not None and self.thread_obj.is_alive():
-            self.thread_obj.raise_exc(KeyboardInterrupt)
+            self.thread_obj.raise_exception(KeyboardInterrupt)
         self.update()
         self.destroy()
 
@@ -1040,11 +1024,9 @@ def step_call_wrapper(out_dict, slice_number, step_index, experiment_settings):
         print(
             f"Unexpected error in step {step_index} of slice {slice_number}: {e.__class__} {e}"
         )
-        err_path = os.path.join(
-            os.getenv("LOCALAPPDATA"),
-            "pytribeam",
-            time.strftime("%Y%m%d-%H%M%S") + "_error_traceback.txt",
-        )
+        app_config = AppConfig.from_env()
+        app_config.ensure_directories()
+        err_path = app_config.get_error_log_path()
         with open(err_path, "w") as f:
             f.write(f"Exception: {type(e).__name__} - {e}\n")
             traceback.print_exc(file=f)
@@ -1067,279 +1049,7 @@ def wrapper_for_output(func, out_dict, *args, **kwargs):
     return out_dict
 
 
-def escape_call():
-    """Function that generates an escape key press."""
-    # Taken from https://stackoverflow.com/a/13615802/21828280
-    import time
-    import ctypes
-    from ctypes import wintypes
-    from collections import namedtuple
-    import time
-
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-
-    def list_windows():
-        """Return a sorted list of visible windows."""
-
-        def check_zero(result, func, args):
-            if not result:
-                err = ctypes.get_last_error()
-                if err:
-                    raise ctypes.WinError(err)
-            return args
-
-        if not hasattr(wintypes, "LPDWORD"):  # PY2
-            wintypes.LPDWORD = ctypes.POINTER(wintypes.DWORD)
-
-        WindowInfo = namedtuple("WindowInfo", "pid title")
-
-        WNDENUMPROC = ctypes.WINFUNCTYPE(
-            wintypes.BOOL,
-            wintypes.HWND,  # _In_ hWnd
-            wintypes.LPARAM,
-        )  # _In_ lParam
-
-        user32.EnumWindows.errcheck = check_zero
-        user32.EnumWindows.argtypes = (
-            WNDENUMPROC,  # _In_ lpEnumFunc
-            wintypes.LPARAM,
-        )  # _In_ lParam
-
-        user32.IsWindowVisible.argtypes = (wintypes.HWND,)  # _In_ hWnd
-
-        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-        user32.GetWindowThreadProcessId.argtypes = (
-            wintypes.HWND,  # _In_      hWnd
-            wintypes.LPDWORD,
-        )  # _Out_opt_ lpdwProcessId
-
-        user32.GetWindowTextLengthW.errcheck = check_zero
-        user32.GetWindowTextLengthW.argtypes = (wintypes.HWND,)  # _In_ hWnd
-
-        user32.GetWindowTextW.errcheck = check_zero
-        user32.GetWindowTextW.argtypes = (
-            wintypes.HWND,  # _In_  hWnd
-            wintypes.LPWSTR,  # _Out_ lpString
-            ctypes.c_int,
-        )  # _In_  nMaxCount
-
-        result = []
-
-        @WNDENUMPROC
-        def enum_proc(hWnd, lParam):
-            if user32.IsWindowVisible(hWnd):
-                pid = wintypes.DWORD()
-                tid = user32.GetWindowThreadProcessId(hWnd, ctypes.byref(pid))
-                length = user32.GetWindowTextLengthW(hWnd) + 1
-                title = ctypes.create_unicode_buffer(length)
-                user32.GetWindowTextW(hWnd, title, length)
-                result.append(WindowInfo(pid.value, title.value))
-            return True
-
-        user32.EnumWindows(enum_proc, 0)
-        return sorted(result)
-
-    def find_window_by_title(title):
-        return user32.FindWindowW(None, title)
-
-    def set_foreground_window(hwnd):
-        if hwnd:
-            user32.ShowWindow(hwnd, 9)
-            user32.SetForegroundWindow(hwnd)
-            return True
-        return False
-
-    INPUT_KEYBOARD = 1
-    KEYEVENTF_KEYUP = 0x0002
-    KEYEVENTF_UNICODE = 0x0004
-    MAPVK_VK_TO_VSC = 0
-
-    # C struct definitions
-    wintypes.ULONG_PTR = wintypes.WPARAM
-
-    class MOUSEINPUT(ctypes.Structure):
-        _fields_ = (
-            ("dx", wintypes.LONG),
-            ("dy", wintypes.LONG),
-            ("mouseData", wintypes.DWORD),
-            ("dwFlags", wintypes.DWORD),
-            ("time", wintypes.DWORD),
-            ("dwExtraInfo", wintypes.ULONG_PTR),
-        )
-
-    class KEYBDINPUT(ctypes.Structure):
-        _fields_ = (
-            ("wVk", wintypes.WORD),
-            ("wScan", wintypes.WORD),
-            ("dwFlags", wintypes.DWORD),
-            ("time", wintypes.DWORD),
-            ("dwExtraInfo", wintypes.ULONG_PTR),
-        )
-
-        def __init__(self, *args, **kwds):
-            super(KEYBDINPUT, self).__init__(*args, **kwds)
-            # some programs use the scan code even if KEYEVENTF_SCANCODE
-            # isn't set in dwFflags, so attempt to map the correct code.
-            if not self.dwFlags & KEYEVENTF_UNICODE:
-                self.wScan = user32.MapVirtualKeyExW(self.wVk, MAPVK_VK_TO_VSC, 0)
-
-    class HARDWAREINPUT(ctypes.Structure):
-        _fields_ = (
-            ("uMsg", wintypes.DWORD),
-            ("wParamL", wintypes.WORD),
-            ("wParamH", wintypes.WORD),
-        )
-
-    class INPUT(ctypes.Structure):
-        class _INPUT(ctypes.Union):
-            _fields_ = (("ki", KEYBDINPUT), ("mi", MOUSEINPUT), ("hi", HARDWAREINPUT))
-
-        _anonymous_ = ("_input",)
-        _fields_ = (("type", wintypes.DWORD), ("_input", _INPUT))
-
-    LPINPUT = ctypes.POINTER(INPUT)
-
-    def _check_count(result, func, args):
-        if result == 0:
-            raise ctypes.WinError(ctypes.get_last_error())
-        return args
-
-    user32.SendInput.errcheck = _check_count
-    user32.SendInput.argtypes = (
-        wintypes.UINT,  # nInputs
-        LPINPUT,  # pInputs
-        ctypes.c_int,
-    )  # cbSize
-
-    # Functions
-
-    def PressKey(hexKeyCode):
-        x = INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(wVk=hexKeyCode))
-        user32.SendInput(1, ctypes.byref(x), ctypes.sizeof(x))
-
-    def ReleaseKey(hexKeyCode):
-        x = INPUT(
-            type=INPUT_KEYBOARD, ki=KEYBDINPUT(wVk=hexKeyCode, dwFlags=KEYEVENTF_KEYUP)
-        )
-        user32.SendInput(1, ctypes.byref(x), ctypes.sizeof(x))
-
-    # Keys to press
-    VK_ESC = 0x1B
-    VK_F6 = 0x75
-    VKs = [VK_ESC, VK_F6, VK_F6]
-
-    titles = list_windows()
-    for title in titles:
-        if "Microscope Control" in title.title:
-            window = find_window_by_title(title=title.title)
-            set_foreground_window(window)
-            for VK in VKs:
-                PressKey(VK)
-                time.sleep(0.05)
-                ReleaseKey(VK)
-
-
-def _async_raise(tid, exctype):
-    """Raises an exception in the threads with id tid"""
-    if not inspect.isclass(exctype):
-        raise TypeError("Only types can be raised (not instances)")
-    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
-        ctypes.c_long(tid), ctypes.py_object(exctype)
-    )
-    if res == 0:
-        raise ValueError("invalid thread id")
-    elif res != 1:
-        # "if it returns a number greater than one, you're in trouble,
-        # and you should call it again with exc=NULL to revert the effect"
-        ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(tid), None)
-        raise SystemError("PyThreadState_SetAsyncExc failed")
-
-
-class ThreadWithExc(threading.Thread):
-    """
-    A thread class that supports raising an exception in the thread from another thread.
-    """
-
-    def _get_my_tid(self):
-        """
-        Function to determine this (self's) thread id
-
-        CAREFUL: this function is executed in the context of the caller
-        thread, to get the identity of the thread represented by this
-        instance.
-        """
-        if not self.is_alive():  # Note: self.isAlive() on older version of Python
-            raise threading.ThreadError("the thread is not active")
-
-        # do we have it cached?
-        if hasattr(self, "_thread_id"):
-            return self._thread_id
-
-        # no, look for it in the _active dict
-        for tid, tobj in threading._active.items():
-            if tobj is self:
-                self._thread_id = tid
-                return tid
-
-        raise AssertionError("could not determine the thread's id")
-
-    def raise_exc(self, exctype):
-        """
-        Raises the given exception type in the context of this thread.
-
-        If the thread is busy in a system call (time.sleep(),
-        socket.accept(), ...), the exception is simply ignored.
-
-        If you are sure that your exception should terminate the thread,
-        one way to ensure that it works is:
-
-            t = ThreadWithExc( ... )
-            ...
-            t.raise_exc( SomeException )
-            while t.isAlive():
-                time.sleep( 0.1 )
-                t.raise_exc( SomeException )
-
-        If the exception is to be caught by the thread, you need a way to
-        check that your thread has caught it.
-
-        CAREFUL: this function is executed in the context of the
-        caller thread, to raise an exception in the context of the
-        thread represented by this instance.
-        """
-        _async_raise(self._get_my_tid(), exctype)
-
-
-class TextRedirector(object):
-    def __init__(self, widget, tag="stdout", log_path=None):
-        self.widget = widget
-        self.tag = tag
-        self.log_path = log_path
-        if self.log_path is not None and not os.path.exists(self.log_path):
-            os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
-            with open(self.log_path, "w") as f:
-                f.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-
-    def write(self, s):
-        # See if the widget was scrolled to the bottom, if it is, we will autoscroll down past the new text
-        autoscroll = self.widget.autoscroll
-        if autoscroll:
-            bottom = self.widget.yview()[1]
-        self.widget.config(state=tk.NORMAL)
-        self.widget.insert(tk.END, s, (self.tag,))
-        self.widget.config(state=tk.DISABLED)
-
-        # Autoscroll if the scrollbar is at the bottom
-        if autoscroll and bottom == 1:
-            self.widget.see(tk.END)
-
-        # Write to the log file
-        if self.log_path is not None:
-            with open(self.log_path, "a") as f:
-                f.write(s)
-
-    def flush(self):
-        pass
+# Note: ThreadWithExc, TextRedirector, and generate_escape_keypress are now imported from common.threading_utils
 
 
 if __name__ == "__main__":
