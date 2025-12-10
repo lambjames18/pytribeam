@@ -125,6 +125,9 @@ class MainApplication(tk.Tk):
         self.experiment_controller.register_callback(
             "validation_failed", self._on_validation_failed
         )
+        self.experiment_controller.register_callback(
+            "detector_warning", self._on_detector_warning
+        )
 
     def _draw(self):
         self._create_menubar()
@@ -849,6 +852,10 @@ class MainApplication(tk.Tk):
         """Handle validation failure."""
         messagebox.showerror("Invalid config", error_message)
         self._update_exp_control_buttons()
+
+    def _on_detector_warning(self, warning_message):
+        """Handle EBSD/EDS detector warning."""
+        messagebox.showwarning("Warning", warning_message)
 
     def stop_step(self):
         """Request stop after step."""
