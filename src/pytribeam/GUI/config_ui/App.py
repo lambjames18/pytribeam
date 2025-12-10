@@ -16,6 +16,7 @@ from pytribeam.GUI.common import AppResources
 from pytribeam.GUI.config_ui.pipeline_model import flatten_dict, unflatten_dict
 from pytribeam.GUI.config_ui.microscope_interface import MicroscopeInterface, format_stage_info
 from pytribeam.GUI.config_ui.validator import ConfigValidator
+from pytribeam.GUI.config_ui.editor_controller import EditorController
 
 
 class Popup:
@@ -96,10 +97,21 @@ class Configurator:
             "write", self._yaml_version_updated
         )
 
+        # Initialize EditorController
+        self.controller = EditorController(version=float(self.yml_version.get()))
+
+        # Register callbacks for controller events
+        self.controller.register_callback('pipeline_created', self._on_pipeline_created)
+        self.controller.register_callback('pipeline_loaded', self._on_pipeline_loaded)
+        self.controller.register_callback('pipeline_changed', self._on_pipeline_changed)
+        self.controller.register_callback('step_selected', self._on_step_selected)
+        self.controller.register_callback('step_added', self._on_step_added)
+        self.controller.register_callback('step_removed', self._on_step_removed)
+
         # Fill the toplevel with the editor window
         self._fill_toplevel(redraw=False)
 
-        # Initialize class variables
+        # Initialize class variables (kept for backward compatibility during migration)
         self.STEP_INDEX = -1
         self.STEP = ""
         self.CONFIG = {}
@@ -113,7 +125,6 @@ class Configurator:
             self.load_config(self.YAML_PATH)
         else:
             self.new_config(ask_save=False)
-            # self.create_pipeline_step("general")
 
         self.toplevel.protocol("WM_DELETE_WINDOW", self.quit)
 
@@ -315,7 +326,102 @@ class Configurator:
 
     def _yaml_version_updated(self, *args):
         """Function called when the yaml version is updated."""
+        self.controller.set_version(float(self.yml_version.get()))
         self._update_editor()
+
+    # -------- Controller Callbacks -------- #
+
+    def _on_pipeline_created(self, pipeline):
+        """Handle pipeline creation."""
+        self._sync_pipeline_to_config()
+        self._update_pipeline()
+        self._update_editor()
+
+    def _on_pipeline_loaded(self, pipeline):
+        """Handle pipeline load."""
+        self.yml_version.trace_remove("write", self.yml_version.trace_id)
+        self.yml_version.set(str(pipeline.version))
+        self.yml_version.trace_id = self.yml_version.trace_add(
+            "write", self._yaml_version_updated
+        )
+        self._sync_pipeline_to_config()
+        self._update_pipeline()
+        self._update_editor()
+
+    def _on_pipeline_changed(self, pipeline):
+        """Handle pipeline changes."""
+        self._sync_pipeline_to_config()
+        self._update_pipeline()
+
+    def _on_step_selected(self, index, step):
+        """Handle step selection."""
+        self.STEP_INDEX = index
+        self.STEP = step.step_type if hasattr(step, 'step_type') else "general"
+        self._update_editor()
+
+    def _on_step_added(self, step):
+        """Handle step addition."""
+        self._sync_pipeline_to_config()
+        self._update_pipeline()
+
+    def _on_step_removed(self, index):
+        """Handle step removal."""
+        self._sync_pipeline_to_config()
+        self._update_pipeline()
+        # Select general or previous step
+        new_index = max(0, index - 1)
+        self.controller.select_step(new_index)
+
+    # -------- Syncing Between CONFIG and Pipeline Model -------- #
+
+    def _sync_pipeline_to_config(self):
+        """Sync pipeline model to CONFIG dict for backward compatibility."""
+        if self.controller.pipeline is None:
+            self.CONFIG = {}
+            return
+
+        pipeline = self.controller.pipeline
+        self.CONFIG = {}
+
+        # Sync general settings
+        general_dict = deepcopy(pipeline.general.parameters)
+        general_dict["step_type"] = "general"
+        self.CONFIG[0] = general_dict
+
+        # Sync steps
+        for i, step in enumerate(pipeline.steps, start=1):
+            step_dict = deepcopy(step.parameters)
+            self.CONFIG[i] = step_dict
+
+        # Make all values strings (for compatibility with existing UI code)
+        for step_idx in self.CONFIG.keys():
+            for key in self.CONFIG[step_idx].keys():
+                self.CONFIG[step_idx][key] = str(self.CONFIG[step_idx][key])
+
+    def _sync_config_to_pipeline(self):
+        """Sync CONFIG dict back to pipeline model before saving."""
+        if self.controller.pipeline is None or not self.CONFIG:
+            return
+
+        pipeline = self.controller.pipeline
+
+        # Sync general settings (index 0)
+        if 0 in self.CONFIG:
+            for key, value in self.CONFIG[0].items():
+                if key != "step_type":
+                    pipeline.general.set_param(key, value)
+
+        # Sync steps (index 1+)
+        for step_idx in sorted(self.CONFIG.keys()):
+            if step_idx == 0:
+                continue
+            # Steps are stored with index starting from 1, but pipeline.steps is 0-indexed
+            step = pipeline.get_step(step_idx)
+            if step:
+                for key, value in self.CONFIG[step_idx].items():
+                    step.set_param(key, value)
+
+    # -------- Microscope Connection -------- #
 
     def _create_microscope_connection(self):
         """Create microscope interface with connection settings from config."""
@@ -608,14 +714,17 @@ class Configurator:
             )
             if save:
                 self.save_config()
+
+        # Clean up old UI bindings
         for key in self.PYVARS.keys():
             self.PYVARS[key].trace_vdelete("w", self.PYVARS[key].trace_id)
-        self.STEP_INDEX = -1
-        self.STEP = ""
-        self.CONFIG = {}
+
+        # Create new pipeline via controller
+        self.controller.create_new_pipeline(version=float(self.yml_version.get()))
+
+        # Reset state
         self.PYVARS = {}
         self.YAML_PATH = None
-        self.create_pipeline_step("general")
         self.update_title()
 
     def load_config(self, path=None):
@@ -641,65 +750,25 @@ class Configurator:
             )
             if path == "" or path is None:
                 return
+
         path = Path(path)
-        # Clear the current configuration
-        self.STEP_INDEX = -1
-        self.STEP = ""
-        self.CONFIG = {}
-        # Remove all traces from the variables
+
+        # Clean up old UI bindings
         for key in self.PYVARS.keys():
             self.PYVARS[key].trace_vdelete("w", self.PYVARS[key].trace_id)
         self.PYVARS = {}
-        # Read the yaml file
-        try:
-            yml_version = ut.yml_version(path)
-            db = ut.yml_to_dict(
-                yml_path_file=path,
-                version=yml_version,
-                required_keys=(
-                    "general",
-                    "config_file_version",
-                ),
-            )
-        except Exception as e:
+
+        # Load pipeline via controller
+        success, error = self.controller.load_pipeline(path)
+        if not success:
             messagebox.showerror(
-                parent=self.toplevel, title="Error reading yaml file", message=f"{e}"
+                parent=self.toplevel,
+                title="Error reading yaml file",
+                message=f"{error}"
             )
             return
-        # Extract relevant sections of the yaml file
-        general = db["general"]
-        steps = db["steps"]
-        # Give general a stype type
-        general["step_type"] = "general"
-        general = flatten_dict(general, sep="/")
-        # Flatten the nested dictionaries
-        flat_steps = {}
-        step_order = []
-        for step_name in steps.keys():
-            step = steps[step_name]
-            step_type = step["step_general"]["step_type"]
-            step_order.append(
-                (step_name, step_type, step["step_general"]["step_number"])
-            )
-            flat_step = flatten_dict(step, sep="/")
-            flat_step["step_general/step_name"] = step_name
-            # flat_step["step_general"]["step_name"] = step_name
-            flat_steps[step_name] = flat_step
-        # Put the steps in the correct order
-        step_order = sorted(step_order, key=lambda x: x[2])
-        self.CONFIG = {0: general}
-        for name, stype, number in step_order:
-            self.CONFIG[number] = flat_steps[name]
-        # Make all the values in the config file strings
-        for step in self.CONFIG.keys():
-            for key in self.CONFIG[step].keys():
-                self.CONFIG[step][key] = str(self.CONFIG[step][key])
-        # Set the step index to the general step and update the pipeline and editor windows
-        self.STEP_INDEX = 0
-        self.STEP = self.CONFIG[self.STEP_INDEX]["step_type"]
-        self.yml_version.set(str(yml_version))
-        self._update_pipeline()
-        self._update_editor()
+
+        # Update state
         self.YAML_PATH = str(path)
         self.update_title()
 
@@ -718,8 +787,20 @@ class Configurator:
             if yml_path == "" or yml_path is None:
                 return
             self.YAML_PATH = yml_path
-        config_db = self.format_config()
-        ut.dict_to_yml(config_db, self.YAML_PATH)
+
+        # Sync CONFIG dict back to pipeline model before saving
+        self._sync_config_to_pipeline()
+
+        # Save via controller
+        success, error = self.controller.save_pipeline(Path(self.YAML_PATH))
+        if not success:
+            messagebox.showerror(
+                parent=self.toplevel,
+                title="Error saving configuration",
+                message=f"{error}"
+            )
+            return
+
         self.update_title()
 
     def save_exit(self):
@@ -735,12 +816,23 @@ class Configurator:
             )
             if yml_path == "" or yml_path is None:
                 return
+            self.YAML_PATH = yml_path
         else:
             yml_path = self.YAML_PATH
-        if self.export_pipeline(yml_path=yml_path):
+
+        # Sync and save via controller
+        self._sync_config_to_pipeline()
+        success, error = self.controller.save_pipeline(Path(yml_path))
+        if success:
             self.clean_exit = True
             self.YAML_PATH = yml_path
             self.toplevel.destroy()
+        else:
+            messagebox.showerror(
+                parent=self.toplevel,
+                title="Error saving configuration",
+                message=f"{error}"
+            )
 
     def quit(self):
         if self.clean_exit:
@@ -759,116 +851,54 @@ class Configurator:
     def create_pipeline_step(self, step_type):
         """Function called when a new pipeline step is created.
         Will focus the new step in the editor and update the pipeline."""
-        # print("Creating pipeline step...", step_type)
-        self.STEP = step_type
-        self.STEP_INDEX = len(self.CONFIG)
-        # print("Step index:", self.STEP_INDEX)
-        if self.STEP_INDEX == 0:
-            self.CONFIG[self.STEP_INDEX] = {"step_type": self.STEP}
+        if step_type == "general":
+            # Special case for general - just select it
+            self.controller.select_step(0)
         else:
-            self.CONFIG[self.STEP_INDEX] = {"step_general/step_type": self.STEP}
-        # Update the step name to have the step type and the number of this type of step
-        step_count = len(
-            [
-                v
-                for v in list(self.CONFIG.values())[1:]
-                if v["step_general/step_type"] == self.STEP
-            ]
-        )
-        if self.STEP_INDEX != 0:
-            self.CONFIG[self.STEP_INDEX][
-                "step_general/step_name"
-            ] = f"{self.STEP}_{step_count}"
-        else:
-            self._update_pipeline()
-        self._update_editor()
-
-        # Update the general to have an additional step
-        self.CONFIG[0]["step_count"] = len(self.CONFIG) - 1
+            # Add step via controller
+            step = self.controller.add_step(step_type)
+            # Select the newly added step
+            new_index = self.controller.get_step_count()
+            self.controller.select_step(new_index)
 
         # Set the pick step button back to "Add Step"
         self.pick_step_b.var.set("Add Step")
 
     def delete_pipeline_step(self, index):
         """Delete a pipeline step from the pipeline."""
-        # print("Deleting pipeline step:", self.CONFIG[index])
-        # Delete the config entry for the index to be deleted
-        del self.CONFIG[index]
-        # Update the step index if we deleted the active step
-        if self.STEP_INDEX == index:
-            self.STEP_INDEX = max(0, self.STEP_INDEX - 1)
-        elif self.STEP_INDEX > index:
-            self.STEP_INDEX -= 1
-        # Re-key the config dictionary
-        self.CONFIG = {i: v for i, v in enumerate(self.CONFIG.values())}
-        if self.STEP_INDEX == 0:
-            self.STEP = self.CONFIG[self.STEP_INDEX]["step_type"]
-        else:
-            self.STEP = self.CONFIG[self.STEP_INDEX]["step_general/step_type"]
-        # Update the pipeline and editor
-        self._update_pipeline()
-        self._update_editor()
-        # Update the general to have one less step
-        self.CONFIG[0]["step_count"] = len(self.CONFIG) - 1
+        # Can't delete general (index 0)
+        if index == 0:
+            return
+
+        # Delete step via controller
+        self.controller.remove_step(index)
 
     def move_pipeline_step(self, index, direction):
         """Move a pipeline step up or down in the pipeline."""
-        # print("Moving pipeline step...", self.CONFIG[index], direction)
-        # Return if the first step is trying to be moved up or the last step down
-        if index == 1 and direction == -1:
+        # Can't move general (index 0)
+        if index == 0:
             return
-        if index == len(self.CONFIG) - 1 and direction == 1:
-            return
-        # Edit the config directly
-        self.CONFIG[index], self.CONFIG[index + direction] = (
-            self.CONFIG[index + direction],
-            self.CONFIG[index],
-        )
-        # If the moved steps don't touch the current step, just update the pipeline
-        if abs(self.STEP_INDEX - index) > 1:
-            pass
-        # If we are moving a neighboring step, update the step index in the opposite direction
-        elif index != self.STEP_INDEX:
-            self.STEP_INDEX -= direction
-        # If we are moving the current step, update the step index in the same direction
-        else:
-            self.STEP_INDEX += direction
-        # Update the pipeline (editor doesnt change here)
-        self._update_pipeline()
-        self._update_editor()
+
+        # Move step via controller
+        self.controller.move_step(index, direction)
 
     def duplicate_pipeline_step(self, index):
         """Duplicate a pipeline step."""
-        # print("Duplicating pipeline step...", self.CONFIG[index])
-        # Copy the step and add it to the end of the pipeline
-        new_step = deepcopy(self.CONFIG[index])
-        index = len(self.CONFIG)
-        self.CONFIG[index] = new_step
-        step_count = len(
-            [
-                v
-                for v in list(self.CONFIG.values())[1:]
-                if v["step_general/step_type"] == new_step["step_general/step_type"]
-            ]
-        )
-        self.CONFIG[index]["step_general/step_name"] = f"{self.STEP}_{step_count}"
-        # Update the pipeline and editor
-        # self._update_pipeline()
-        self._update_editor()
-        # Update the general to have an additional step
-        self.CONFIG[0]["step_count"] = len(self.CONFIG) - 1
+        # Can't duplicate general (index 0)
+        if index == 0:
+            return
+
+        # Duplicate step via controller
+        new_step = self.controller.duplicate_step(index)
+        if new_step:
+            # Select the newly duplicated step
+            new_index = self.controller.get_step_count()
+            self.controller.select_step(new_index)
 
     def select_pipeline_step(self, option):
         """Based on the selected step, update the editor with the new step."""
-        # print("Selecting pipeline step...", option)
         index = int(option.split(".")[0])
-        self.STEP_INDEX = index
-        if index == 0:
-            self.STEP = self.CONFIG[index]["step_type"]
-        else:
-            self.STEP = self.CONFIG[self.STEP_INDEX]["step_general/step_type"]
-        self._update_pipeline()
-        self._update_editor()
+        self.controller.select_step(index)
 
     def _update_pipeline(self):
         """Update the pipeline based on the current configuration.
