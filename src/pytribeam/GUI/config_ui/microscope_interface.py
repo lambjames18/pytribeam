@@ -4,7 +4,7 @@ This module provides an abstraction layer for microscope communication,
 separating hardware interaction from UI code.
 """
 
-from typing import Optional
+from typing import Optional, Dict, Tuple
 
 import pytribeam.factory as factory
 import pytribeam.laser as laser
@@ -102,7 +102,7 @@ class MicroscopeInterface:
                 "Not connected to microscope. Call connect() first."
             )
 
-    def get_stage_position(self) -> tbt.StagePositionSettings:
+    def get_stage_position(self) -> tbt.StagePositionUser:
         """Get current stage position.
 
         Returns:
@@ -116,11 +116,9 @@ class MicroscopeInterface:
         try:
             return factory.active_stage_position_settings(self._microscope)
         except Exception as e:
-            raise MicroscopeConnectionError(
-                "Failed to get stage position"
-            ) from e
+            raise MicroscopeConnectionError("Failed to get stage position") from e
 
-    def get_working_distances(self) -> dict[str, float]:
+    def get_working_distances(self) -> Dict[str, float]:
         """Get current electron and ion beam working distances.
 
         Returns:
@@ -151,11 +149,9 @@ class MicroscopeInterface:
                 "ion_wd_mm": ion_wd,
             }
         except Exception as e:
-            raise MicroscopeConnectionError(
-                "Failed to get working distances"
-            ) from e
+            raise MicroscopeConnectionError("Failed to get working distances") from e
 
-    def get_stage_info(self) -> dict[str, any]:
+    def get_stage_info(self) -> Dict[str, any]:
         """Get comprehensive stage information.
 
         Returns:
@@ -182,9 +178,7 @@ class MicroscopeInterface:
         except MicroscopeConnectionError:
             raise
         except Exception as e:
-            raise MicroscopeConnectionError(
-                "Failed to get stage info"
-            ) from e
+            raise MicroscopeConnectionError("Failed to get stage info") from e
 
     def get_imaging_settings(self) -> tbt.ImageSettings:
         """Get current imaging settings.
@@ -200,11 +194,9 @@ class MicroscopeInterface:
         try:
             return factory.active_image_settings(self._microscope)
         except Exception as e:
-            raise MicroscopeConnectionError(
-                "Failed to get imaging settings"
-            ) from e
+            raise MicroscopeConnectionError("Failed to get imaging settings") from e
 
-    def get_laser_state(self) -> dict:
+    def get_laser_state(self) -> Dict:
         """Get current laser settings.
 
         Returns:
@@ -217,11 +209,9 @@ class MicroscopeInterface:
             laser_state = factory.active_laser_state()
             return laser.laser_state_to_db(laser_state)
         except Exception as e:
-            raise MicroscopeConnectionError(
-                "Failed to get laser state"
-            ) from e
+            raise MicroscopeConnectionError("Failed to get laser state") from e
 
-    def test_connection(self) -> tuple[bool, str]:
+    def test_connection(self) -> Tuple[bool, str]:
         """Test microscope connection.
 
         Returns:
@@ -237,7 +227,7 @@ class MicroscopeInterface:
             return False, f"Unexpected error: {e}"
 
 
-def check_device_connections() -> dict[str, bool]:
+def check_device_connections() -> Dict[str, bool]:
     """Check connections to peripheral devices (EDS, EBSD, laser).
 
     Returns:
@@ -254,7 +244,7 @@ def check_device_connections() -> dict[str, bool]:
         return {"error": str(e)}
 
 
-def format_stage_info(stage_info: dict[str, float]) -> str:
+def format_stage_info(stage_info: Dict[str, float]) -> str:
     """Format stage information for display.
 
     Args:

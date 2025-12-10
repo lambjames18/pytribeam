@@ -5,7 +5,7 @@ images, icons, and documentation files.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List
 
 
 class AppResources:
@@ -46,7 +46,13 @@ class AppResources:
         # From GUI/module.py, go up to pytribeam root
         module_path = Path(module_file)
         # module.py -> GUI -> pytribeam -> src -> pytribeam_root
-        base = module_path.parent.parent.parent.parent
+        if module_path.parent.name == "GUI":
+            base = module_path.parent.parent.parent.parent
+        elif (
+            module_path.parent.name == "common"
+            or module_path.parent.name == "config_ui"
+        ):
+            base = module_path.parent.parent.parent.parent.parent
         return cls(base_path=base)
 
     @property
@@ -67,7 +73,8 @@ class AppResources:
     @property
     def user_guide_path(self) -> Path:
         """Path to user guide HTML index."""
-        return self.base_path / "docs/userguide/book/index.html"
+        # return self.base_path / "docs" / "userguide" / "book" / "index.html"
+        return "https://github.com/sandialabs/pytribeam/blob/main/docs/userguide/src/SUMMARY.md"
 
     def get_logo_path(self, theme: str = "dark") -> Path:
         """Get logo path for specified theme.
@@ -88,7 +95,7 @@ class AppResources:
         else:
             raise ValueError(f"Unknown theme: {theme}. Must be 'dark' or 'light'")
 
-    def verify_resources(self) -> dict[str, bool]:
+    def verify_resources(self) -> Dict[str, bool]:
         """Check which resources exist on filesystem.
 
         Returns:
@@ -101,7 +108,7 @@ class AppResources:
             "user_guide": self.user_guide_path.exists(),
         }
 
-    def get_missing_resources(self) -> list[str]:
+    def get_missing_resources(self) -> List[str]:
         """Get list of missing resource files.
 
         Returns:

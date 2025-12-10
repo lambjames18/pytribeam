@@ -5,7 +5,7 @@ separating validation concerns from UI concerns.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional, Dict, Tuple
 
 import pytribeam.factory as factory
 import pytribeam.types as tbt
@@ -53,7 +53,7 @@ class ConfigValidator:
         """Initialize validator."""
         self._yml_format = ut.yml_format(version=1.0)
 
-    def validate_general(self, config_dict: dict) -> ValidationResult:
+    def validate_general(self, config_dict: Dict) -> ValidationResult:
         """Validate general configuration section.
 
         Args:
@@ -90,7 +90,7 @@ class ConfigValidator:
         self,
         microscope: tbt.Microscope,
         step_name: str,
-        step_config: dict,
+        step_config: Dict,
         general_settings,
     ) -> ValidationResult:
         """Validate a single pipeline step.
@@ -133,9 +133,9 @@ class ConfigValidator:
 
     def validate_full_pipeline(
         self,
-        config_dict: dict,
+        config_dict: Dict,
         microscope: Optional[tbt.Microscope] = None,
-    ) -> list[ValidationResult]:
+    ) -> List[ValidationResult]:
         """Validate complete pipeline configuration.
 
         Args:
@@ -223,7 +223,7 @@ class ConfigValidator:
         self,
         pipeline: PipelineConfig,
         microscope: Optional[tbt.Microscope] = None,
-    ) -> list[ValidationResult]:
+    ) -> List[ValidationResult]:
         """Validate a PipelineConfig model.
 
         Convenience method that converts model to dictionary and validates.
@@ -286,7 +286,7 @@ class ConfigValidator:
     def validate_pipeline_structure(
         self,
         pipeline: PipelineConfig,
-    ) -> list[ValidationResult]:
+    ) -> List[ValidationResult]:
         """Validate pipeline structure without schema validation.
 
         Checks basic requirements like unique names and presence of steps.
@@ -309,7 +309,7 @@ class ConfigValidator:
         return results
 
     @staticmethod
-    def get_summary(results: list[ValidationResult]) -> tuple[bool, str]:
+    def get_summary(results: List[ValidationResult]) -> Tuple[bool, str]:
         """Get summary of validation results.
 
         Args:

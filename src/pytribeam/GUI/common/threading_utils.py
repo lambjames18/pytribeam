@@ -10,7 +10,7 @@ import threading
 import time
 from collections import namedtuple
 from ctypes import wintypes
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 
 class StoppableThread(threading.Thread):
@@ -26,7 +26,7 @@ class StoppableThread(threading.Thread):
     def __init__(
         self,
         target: Callable,
-        args: tuple = (),
+        args: Tuple = (),
         kwargs: Optional[dict] = None,
         name: Optional[str] = None,
     ):
@@ -133,7 +133,7 @@ class ThreadManager:
         self,
         name: str,
         target: Callable,
-        args: tuple = (),
+        args: Tuple = (),
         kwargs: Optional[dict] = None,
     ) -> StoppableThread:
         """Run function in managed thread.
@@ -219,9 +219,7 @@ class ThreadManager:
     def cleanup(self):
         """Clean up stopped threads from tracking."""
         self._threads = {
-            name: thread
-            for name, thread in self._threads.items()
-            if thread.is_alive()
+            name: thread for name, thread in self._threads.items() if thread.is_alive()
         }
 
 
@@ -246,6 +244,7 @@ class TextRedirector:
 
         if self.log_path is not None:
             import os
+
             if not os.path.exists(self.log_path):
                 os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
                 with open(self.log_path, "w") as f:
@@ -295,6 +294,7 @@ def generate_escape_keypress():
         OSError: If on non-Windows platform
     """
     import sys
+
     if sys.platform != "win32":
         raise OSError("generate_escape_keypress only works on Windows")
 

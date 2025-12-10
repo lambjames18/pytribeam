@@ -7,7 +7,7 @@ pipeline configurations, separating data concerns from UI concerns.
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Dict, List, Tuple
 
 import pytribeam.GUI.config_ui.lookup as lut
 import pytribeam.utilities as ut
@@ -30,7 +30,7 @@ class StepConfig:
     index: int
     step_type: str
     name: str
-    parameters: dict[str, Any] = field(default_factory=dict)
+    parameters: Dict[str, Any] = field(default_factory=dict)
 
     def get_param(self, path: str, default: Any = None) -> Any:
         """Get parameter value by path.
@@ -64,7 +64,7 @@ class StepConfig:
         """
         return path in self.parameters
 
-    def get_all_params(self) -> dict[str, Any]:
+    def get_all_params(self) -> Dict[str, Any]:
         """Get all parameters as dictionary.
 
         Returns:
@@ -72,7 +72,7 @@ class StepConfig:
         """
         return deepcopy(self.parameters)
 
-    def update_params(self, params: dict[str, Any]):
+    def update_params(self, params: Dict[str, Any]):
         """Update multiple parameters at once.
 
         Args:
@@ -85,7 +85,9 @@ class StepConfig:
         self.parameters.clear()
 
     def __repr__(self) -> str:
-        return f"StepConfig(index={self.index}, type={self.step_type}, name={self.name})"
+        return (
+            f"StepConfig(index={self.index}, type={self.step_type}, name={self.name})"
+        )
 
 
 @dataclass
@@ -104,7 +106,7 @@ class PipelineConfig:
 
     version: float
     general: StepConfig
-    steps: list[StepConfig] = field(default_factory=list)
+    steps: List[StepConfig] = field(default_factory=list)
     file_path: Optional[Path] = None
 
     @classmethod
@@ -150,7 +152,10 @@ class PipelineConfig:
             index=index,
             step_type=step_type,
             name=name,
-            parameters={"step_general/step_type": step_type, "step_general/step_name": name},
+            parameters={
+                "step_general/step_type": step_type,
+                "step_general/step_name": name,
+            },
         )
 
         self.steps.append(step)
@@ -278,7 +283,7 @@ class PipelineConfig:
         """
         return len(self.steps)
 
-    def validate_step_names(self) -> tuple[bool, list[str]]:
+    def validate_step_names(self) -> Tuple[bool, List[str]]:
         """Check for duplicate step names.
 
         Returns:
@@ -368,7 +373,7 @@ class PipelineConfig:
         ut.dict_to_yml(config_dict, str(yaml_path))
         self.file_path = yaml_path
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict:
         """Convert pipeline to dictionary suitable for YAML export.
 
         Returns:
@@ -405,7 +410,7 @@ class PipelineConfig:
         return f"PipelineConfig(version={self.version}, steps={len(self.steps)})"
 
 
-def flatten_dict(d: dict, parent_key: str = "", sep: str = "/") -> dict:
+def flatten_dict(d: Dict, parent_key: str = "", sep: str = "/") -> Dict:
     """Flatten nested dictionary to single level with separator.
 
     Args:
@@ -429,7 +434,7 @@ def flatten_dict(d: dict, parent_key: str = "", sep: str = "/") -> dict:
     return dict(items)
 
 
-def unflatten_dict(d: dict, sep: str = "/") -> dict:
+def unflatten_dict(d: Dict, sep: str = "/") -> Dict:
     """Unflatten dictionary with separators to nested structure.
 
     Args:

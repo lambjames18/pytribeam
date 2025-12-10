@@ -7,7 +7,7 @@ from .errors import (
     MicroscopeConnectionError,
     ValidationError,
 )
-from .threading_utils import StoppableThread, ThreadManager
+from .threading_utils import StoppableThread, ThreadManager, TextRedirector
 from .logging_config import setup_logging
 from .config_manager import AppConfig
 
@@ -19,6 +19,7 @@ __all__ = [
     "ValidationError",
     "StoppableThread",
     "ThreadManager",
+    "TextRedirector",
     "setup_logging",
     "AppConfig",
 ]

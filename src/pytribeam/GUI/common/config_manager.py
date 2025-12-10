@@ -7,7 +7,7 @@ and ensures necessary directories exist.
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclass
@@ -30,7 +30,7 @@ class AppConfig:
     log_dir: Path
     default_theme: str = "dark"
     auto_save_interval: int = 300  # seconds
-    recent_configs: list[str] = field(default_factory=list)
+    recent_configs: List[str] = field(default_factory=list)
     max_recent_files: int = 10
 
     @classmethod
@@ -50,7 +50,9 @@ class AppConfig:
             base_dir = Path(os.getenv("LOCALAPPDATA", os.path.expanduser("~")))
         else:
             # Unix-like
-            base_dir = Path(os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share")))
+            base_dir = Path(
+                os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+            )
 
         app_dir = base_dir / app_name
 
@@ -139,7 +141,7 @@ class AppConfig:
         # Trim to max length
         self.recent_configs = self.recent_configs[: self.max_recent_files]
 
-    def get_recent_configs(self) -> list[Path]:
+    def get_recent_configs(self) -> List[Path]:
         """Get list of recent configuration files that still exist.
 
         Returns:

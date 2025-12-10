@@ -19,7 +19,12 @@ from pytribeam import workflow, stage, utilities, log, laser, insertable_devices
 import pytribeam.types as tbt
 
 # Import refactored common utilities
-from pytribeam.GUI.common import AppResources, AppConfig, StoppableThread, TextRedirector
+from pytribeam.GUI.common import (
+    AppResources,
+    AppConfig,
+    StoppableThread,
+    TextRedirector,
+)
 from pytribeam.GUI.common.threading_utils import generate_escape_keypress
 
 
@@ -557,8 +562,10 @@ class MainApplication(tk.Tk):
                 initialdir=os.getcwd(),
             )
         )
-        if not save_path:
+        if save_path == Path():
             return
+        if not save_path.suffix == ".txt":
+            save_path = save_path.with_suffix(".txt")
         shutil.copy(self.terminal_log_path, save_path)
         messagebox.showinfo("Success", f"Log file saved to {save_path}")
 
@@ -863,11 +870,12 @@ class MainApplication(tk.Tk):
             # The experiment ended for an unknown reason
             print("-----> Experiment stopped (unknown) <-----")
         # Ensure that all devices are retracted
-        insertable_devices.retract_all_devices(
-            microscope=experiment_settings.microscope,
-            enable_EBSD=experiment_settings.enable_EBSD,
-            enable_EDS=experiment_settings.enable_EDS,
-        )
+        if not stop_now:
+            insertable_devices.retract_all_devices(
+                microscope=experiment_settings.microscope,
+                enable_EBSD=experiment_settings.enable_EBSD,
+                enable_EDS=experiment_settings.enable_EDS,
+            )
         # Reset the stop flags
         self.stop_after_slice.set(False)
         self.stop_after_step.set(False)
@@ -980,7 +988,9 @@ class MainApplication(tk.Tk):
         """Open the user guide in a web browser."""
         import webbrowser
 
-        webbrowser.open(f"file://{self.resources.user_guide_path}")
+        ### TODO: Fix this to open local file properly on all OSes
+        # webbrowser.open(f"file://{self.resources.user_guide_path}")
+        webbrowser.open(f"{self.resources.user_guide_path}")
 
     def quit(self):
         """
