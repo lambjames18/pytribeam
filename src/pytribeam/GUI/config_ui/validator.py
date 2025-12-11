@@ -157,7 +157,8 @@ class ConfigValidator:
         results = []
 
         # Validate general first
-        general_result = self.validate_general(config_dict)
+        general_db = config_dict.get("general", {})
+        general_result = self.validate_general(general_db)
         results.append(general_result)
 
         if not general_result.success:
@@ -231,7 +232,6 @@ class ConfigValidator:
     def validate_pipeline_model(
         self,
         pipeline: PipelineConfig,
-        microscope: Optional[tbt.Microscope] = None,
     ) -> List[ValidationResult]:
         """Validate a PipelineConfig model.
 
@@ -245,7 +245,7 @@ class ConfigValidator:
             List of ValidationResult objects
         """
         config_dict = pipeline.to_dict()
-        return self.validate_full_pipeline(config_dict, microscope)
+        return self.validate_full_pipeline(config_dict)
 
     def check_duplicate_names(self, pipeline: PipelineConfig) -> ValidationResult:
         """Check for duplicate step names.
