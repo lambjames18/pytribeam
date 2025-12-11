@@ -833,18 +833,20 @@ def general(
         yml_version = 1.1
 
     if yml_format.version >= 1.2:
-        email_db = general_db["email_update_settings"]
-        email_settings = tbt.EmailUpdateConfig(
-            ssh_host=email_db["ssh_host"],
-            ssh_port=email_db["ssh_port"],
-            ssh_user=email_db["ssh_user"],
-            ssh_key_path=email_db["ssh_key_path"],
-            smtp_server=email_db["smtp_server"],
-            smtp_port=email_db["smtp_port"],
-            sender=email_db["sender"],
-            sender_password=email_db["sender_password"],
-            recipients=email_db["recipients"].split(","),
-        )
+        email_db = general_db.get("email_update_settings")
+        # Only create EmailUpdateConfig if email settings are actually provided
+        if email_db and not ut.none_value_dictionary(email_db):
+            email_settings = tbt.EmailUpdateConfig(
+                ssh_host=email_db["ssh_host"],
+                ssh_port=email_db["ssh_port"],
+                ssh_user=email_db["ssh_user"],
+                ssh_key_path=email_db["ssh_key_path"],
+                smtp_server=email_db["smtp_server"],
+                smtp_port=email_db["smtp_port"],
+                sender=email_db["sender"],
+                sender_password=email_db["sender_password"],
+                recipients=email_db["recipients"].split(","),
+            )
         yml_version = 1.2
 
     general_settings = tbt.GeneralSettings(
@@ -2477,8 +2479,8 @@ def validate_general_settings(
         edax_settings=edax_settings,
     )
 
-    # Check the email settings
-    if email_settings is not None:
+    # Check the email settings (only validate if settings are provided and not empty)
+    if email_settings is not None and not ut.none_value_dictionary(email_settings):
         validate_email_settings(
             yml_format=yml_format,
             email_settings=email_settings,
