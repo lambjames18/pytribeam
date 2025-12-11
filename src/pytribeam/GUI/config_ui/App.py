@@ -17,6 +17,7 @@ from pytribeam.GUI.config_ui.pipeline_model import flatten_dict, unflatten_dict
 from pytribeam.GUI.config_ui.microscope_interface import MicroscopeInterface, format_stage_info
 from pytribeam.GUI.config_ui.validator import ConfigValidator
 from pytribeam.GUI.config_ui.editor_controller import EditorController
+from pytribeam.GUI.config_ui.parameter_tracker import ParameterTracker
 
 
 class Popup:
@@ -100,6 +101,9 @@ class Configurator:
         # Initialize EditorController
         self.controller = EditorController(version=float(self.yml_version.get()))
 
+        # Initialize ParameterTracker for managing UI variable bindings
+        self.param_tracker = ParameterTracker(self.controller)
+
         # Register callbacks for controller events
         self.controller.register_callback('pipeline_created', self._on_pipeline_created)
         self.controller.register_callback('pipeline_loaded', self._on_pipeline_loaded)
@@ -107,6 +111,7 @@ class Configurator:
         self.controller.register_callback('step_selected', self._on_step_selected)
         self.controller.register_callback('step_added', self._on_step_added)
         self.controller.register_callback('step_removed', self._on_step_removed)
+        self.controller.register_callback('parameter_changed', self._on_parameter_changed)
 
         # Fill the toplevel with the editor window
         self._fill_toplevel(redraw=False)
@@ -115,7 +120,6 @@ class Configurator:
         self.STEP_INDEX = -1
         self.STEP = ""
         self.CONFIG = {}
-        self.PYVARS = {}
         self.clean_exit = False
         self.frames_dict = {}
         self.pipeline_buttons = {}
@@ -371,6 +375,24 @@ class Configurator:
         # Select general or previous step
         new_index = max(0, index - 1)
         self.controller.select_step(new_index)
+
+    def _on_parameter_changed(self, path, value):
+        """Handle parameter change from controller."""
+        # Update CONFIG dict for backward compatibility
+        if self.STEP_INDEX >= 0 and self.STEP_INDEX in self.CONFIG:
+            self.CONFIG[self.STEP_INDEX][path] = str(value)
+
+        # Mark configuration as unvalidated
+        try:
+            self.status_label.config(
+                text="UNVALIDATED", bg=self.theme.yellow, fg=self.theme.yellow_fg
+            )
+        except tk.TclError:
+            pass  # Widget may not exist yet
+
+        # If step name changed, update pipeline display
+        if "step_name" in path:
+            self._update_pipeline()
 
     # -------- Syncing Between CONFIG and Pipeline Model -------- #
 
@@ -716,14 +738,12 @@ class Configurator:
                 self.save_config()
 
         # Clean up old UI bindings
-        for key in self.PYVARS.keys():
-            self.PYVARS[key].trace_vdelete("w", self.PYVARS[key].trace_id)
+        self.param_tracker.clear()
 
         # Create new pipeline via controller
         self.controller.create_new_pipeline(version=float(self.yml_version.get()))
 
         # Reset state
-        self.PYVARS = {}
         self.YAML_PATH = None
         self.update_title()
 
@@ -754,9 +774,7 @@ class Configurator:
         path = Path(path)
 
         # Clean up old UI bindings
-        for key in self.PYVARS.keys():
-            self.PYVARS[key].trace_vdelete("w", self.PYVARS[key].trace_id)
-        self.PYVARS = {}
+        self.param_tracker.clear()
 
         # Load pipeline via controller
         success, error = self.controller.load_pipeline(path)
@@ -1111,26 +1129,19 @@ class Configurator:
 
     def _create_editor_entry(self, row, value, path, frame):
         """Helper function to create a widget in the editor for a specific parameter."""
-        # Create the tkinter variable and store it in the PYVARS dictionary
-        var = tk.StringVar(self.editor, name=path)
-        self.PYVARS[path] = var
-
-        # Now trace the variable
-        self.PYVARS[path].trace_id = self.PYVARS[path].trace_add(
-            "write", self._var_update
+        # Create the tracked variable using ParameterTracker
+        # The tracker automatically handles validation and updates to the controller
+        var = self.param_tracker.create_variable(
+            param_path=path,
+            dtype=value.dtype,
+            default=value.default,
         )
 
-        # Set the value of the variable to the value in the config file
-        if path in self.CONFIG[self.STEP_INDEX].keys():
-            # print("Setting value:", self.CONFIG[self.STEP_INDEX][path])
-            var.set(self.CONFIG[self.STEP_INDEX][path])
-        else:
-            self.CONFIG[self.STEP_INDEX][path] = ""
-            var.set(value.default)
+        # Ensure the parameter exists in CONFIG dict for backward compatibility
+        if path not in self.CONFIG[self.STEP_INDEX].keys():
+            self.CONFIG[self.STEP_INDEX][path] = str(value.default)
 
         # Create the widgets and place them on the grid
-        # local_frame = tk.Frame(frame, bg=self.theme.bg)
-        # local_frame.grid(row=row, column=0, columnspan=3, sticky="nsew", pady=5)
         kwargs = deepcopy(value.widget_kwargs)
         kwargs.update({"font": ctk.FONT, "bg": self.theme.bg_off})
         if value.widget == ctk.Entry:
@@ -1142,7 +1153,7 @@ class Configurator:
         )
         widget = value.widget(
             frame,
-            var=self.PYVARS[path],
+            var=var,
             **kwargs,
         )
         # label.pack(side="left", padx=(0, 10))
@@ -1157,34 +1168,14 @@ class Configurator:
     def _clear_editor(self, row):
         """Clear the editor by removing all widgets and traces.
         This is useful when switching between steps."""
-        # Disconnect currently traced variables. They will be reconnected when the editor is updated
-        relevant_keys = list(self.PYVARS.keys())
-        for key in relevant_keys:
-            self.PYVARS[key].trace_vdelete("w", self.PYVARS[key].trace_id)
-        self.PYVARS = {}
+        # Clear all tracked variables and their traces
+        self.param_tracker.clear()
 
         # Remove the old widgets
         for i in range(2, row + 1):
             for widget in self.editor.grid_slaves(row=i - 1):
                 widget.destroy()
 
-    def _var_update(self, *args):
-        """Update the config dictionary with the new value of the variable.
-        This is called whenever a variable is changed."""
-        string = args[0]
-        if self.PYVARS[string].get() != self.CONFIG[self.STEP_INDEX][string]:
-            try:
-                self.status_label.config(
-                    text="UNVALIDATED", bg=self.theme.yellow, fg=self.theme.yellow_fg
-                )
-            except tk.TclError:
-                pass
-        # print("New value:", self.PYVARS[string].get())
-        # print("Old value:", self.CONFIG[self.STEP_INDEX][string])
-        self.CONFIG[self.STEP_INDEX][string] = self.PYVARS[string].get()
-        # print("Updated config:", self.CONFIG[self.STEP_INDEX][string])
-        if "step_name" in string:
-            self._update_pipeline()
 
     def export_pipeline(self, yml_path, force_valid=True):
         """Export the pipeline to a yaml file.
