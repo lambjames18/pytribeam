@@ -97,6 +97,7 @@ class StepConfig:
         step_type: Type of step (e.g., 'image', 'fib', 'laser')
         name: Unique name for this step
         parameters: Flattened dictionary of step parameters
+        version: Configuration file version
     """
 
     index: int
@@ -137,15 +138,19 @@ class StepConfig:
         """
         return path in self.parameters
 
-    def get_all_params(self) -> Dict[str, Any]:
+    def get_all_params(self, flat: bool = True) -> Dict[str, Any]:
         """Get all parameters as dictionary.
 
         Returns:
             Copy of parameters dictionary
         """
-        return _apply_type_conversion(
+        db = _apply_type_conversion(
             deepcopy(self.parameters), self.step_type, self.version
         )
+        if flat:
+            return db
+        else:
+            return unflatten_dict(db, sep="/")
 
     def update_params(self, params: Dict[str, Any]):
         """Update multiple parameters at once.

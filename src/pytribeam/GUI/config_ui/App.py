@@ -22,7 +22,7 @@ from pytribeam.GUI.config_ui.validator import ConfigValidator
 from pytribeam.GUI.config_ui.editor_controller import EditorController
 from pytribeam.GUI.config_ui.parameter_tracker import ParameterTracker
 
-### TODO: Make sure validation works as expected ###
+### TODO: Need to fix full pipeline validation  ###
 ### TODO: Make sure the microscope connection works properly ###
 
 
@@ -541,11 +541,12 @@ class Configurator:
         general_db = self.controller.pipeline.general.parameters
         host = general_db.get("connection_host", "localhost")
         port = general_db.get("connection_port", "")
+        port = int(port) if port != "" else None
         interface = MicroscopeInterface(host=host, port=port)
 
         # Try to connect using both the default and custom host/port
         hosts_to_try = [host, "localhost"] if host != "localhost" else [host]
-        ports_to_try = [port, ""] if port != "" else [port]
+        ports_to_try = [port, None] if port is not None else [port]
         tries = []
         for h in hosts_to_try:
             for p in ports_to_try:
@@ -1307,7 +1308,9 @@ class Configurator:
             return False
 
         # Validate step
-        success, message = self.controller.validate_step(step_index, microscope)
+        success, message = self.controller.validate_step(
+            step_index, microscope._microscope
+        )
 
         pre = "" if success else "un"
         messagebox.showinfo(

@@ -5,7 +5,7 @@ separating validation concerns from UI concerns.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Union
 
 import pytribeam.factory as factory
 import pytribeam.types as tbt
@@ -23,12 +23,21 @@ class ValidationResult:
         step_name: Name of step validated
         message: Detailed message (usually for failures)
         exception: Original exception if validation failed
+        settings: Validated settings object (if applicable)
     """
 
     success: bool
     step_name: str
     message: str = ""
     exception: Optional[Exception] = None
+    settings: Union[
+        tbt.CustomSettings,
+        tbt.EBSDSettings,
+        tbt.EDSSettings,
+        tbt.ImageSettings,
+        tbt.FIBSettings,
+        tbt.LaserSettings,
+    ] = None
 
     def __str__(self) -> str:
         """Get human-readable string representation."""
@@ -62,17 +71,15 @@ class ConfigValidator:
         Returns:
             ValidationResult indicating success or failure
         """
-        print("Validating general configuration...")
-        print(config_dict)
         try:
             general_set = factory.general(
                 config_dict,
                 yml_format=self._yml_format,
             )
-            print(general_set)
             return ValidationResult(
                 success=True,
                 step_name="general",
+                settings=general_set,
             )
         except KeyError as e:
             return ValidationResult(
@@ -82,7 +89,6 @@ class ConfigValidator:
                 exception=e,
             )
         except Exception as e:
-            print("Error during general validation:", e)
             return ValidationResult(
                 success=False,
                 step_name="general",
@@ -109,7 +115,7 @@ class ConfigValidator:
             ValidationResult indicating success or failure
         """
         try:
-            _ = factory.step(
+            step_settings = factory.step(
                 microscope,
                 step_name=step_name,
                 step_settings=step_config,
@@ -117,8 +123,7 @@ class ConfigValidator:
                 yml_format=self._yml_format,
             )
             return ValidationResult(
-                success=True,
-                step_name=step_name,
+                success=True, step_name=step_name, settings=step_settings
             )
         except KeyError as e:
             return ValidationResult(

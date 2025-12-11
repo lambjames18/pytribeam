@@ -295,12 +295,20 @@ class EditorController:
         if self.pipeline is None:
             return False, "No pipeline loaded"
 
+        # Get general settings for validation context, making sure they are valid
+        result = self.validator.validate_general(self.pipeline.general.get_all_params())
+        if not result.success:
+            return False, "General configuration is invalid"
+        general = result.settings
+
         # Get the step of interest
         step = self.pipeline.get_step(index)
         if step is None:
             return False, f"Step at index {index} not found"
 
-        result = self.validator.validate_step(step.get_all_params(), microscope)
+        # Atrtribute MicroscopeInterface has no attribute specimen
+        step_db = step.get_all_params(flat=False)
+        result = self.validator.validate_step(microscope, step.name, step_db, general)
         success = result.success
         message = (
             "Step is valid." if success else f"Step validation failed: {result.message}"
