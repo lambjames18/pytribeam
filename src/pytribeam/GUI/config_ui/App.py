@@ -985,7 +985,6 @@ class Configurator:
             # If the row is not the end of the pipeline, update the button with the new option (in case it has changed)
             else:
                 button = self.pipeline.grid_slaves(row_i)[0]
-                button.bg = self.theme.bg
                 button.config(
                     text=option,
                     command=lambda a=option: self.select_pipeline_step(a),
