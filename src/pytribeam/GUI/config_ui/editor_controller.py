@@ -76,7 +76,7 @@ class EditorController:
         self.pipeline = PipelineConfig.create_new(version=version)
         self.current_step_index = 0
         self._notify("pipeline_created", self.pipeline)
-        self._notify("step_selected", 0, self.pipeline.general)
+        # self._notify("step_selected", 0, self.pipeline.general)
 
     def load_pipeline(self, yaml_path: Path) -> Tuple[bool, Optional[str]]:
         """Load pipeline from YAML file.
@@ -129,7 +129,7 @@ class EditorController:
             raise ValueError("No pipeline loaded")
 
         step = self.pipeline.add_step(step_type)
-        self._notify("pipeline_changed", self.pipeline)
+        # self._notify("pipeline_changed", self.pipeline)
         self._notify("step_added", step)
         return step
 

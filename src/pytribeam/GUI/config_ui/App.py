@@ -14,7 +14,10 @@ import pytribeam.GUI.config_ui.lookup as lut
 # Import refactored modules
 from pytribeam.GUI.common import AppResources
 from pytribeam.GUI.config_ui.pipeline_model import flatten_dict, unflatten_dict
-from pytribeam.GUI.config_ui.microscope_interface import MicroscopeInterface, format_stage_info
+from pytribeam.GUI.config_ui.microscope_interface import (
+    MicroscopeInterface,
+    format_stage_info,
+)
 from pytribeam.GUI.config_ui.validator import ConfigValidator
 from pytribeam.GUI.config_ui.editor_controller import EditorController
 
@@ -101,12 +104,12 @@ class Configurator:
         self.controller = EditorController(version=float(self.yml_version.get()))
 
         # Register callbacks for controller events
-        self.controller.register_callback('pipeline_created', self._on_pipeline_created)
-        self.controller.register_callback('pipeline_loaded', self._on_pipeline_loaded)
-        self.controller.register_callback('pipeline_changed', self._on_pipeline_changed)
-        self.controller.register_callback('step_selected', self._on_step_selected)
-        self.controller.register_callback('step_added', self._on_step_added)
-        self.controller.register_callback('step_removed', self._on_step_removed)
+        self.controller.register_callback("pipeline_created", self._on_pipeline_created)
+        self.controller.register_callback("pipeline_loaded", self._on_pipeline_loaded)
+        self.controller.register_callback("pipeline_changed", self._on_pipeline_changed)
+        self.controller.register_callback("step_selected", self._on_step_selected)
+        self.controller.register_callback("step_added", self._on_step_added)
+        self.controller.register_callback("step_removed", self._on_step_removed)
 
         # Fill the toplevel with the editor window
         self._fill_toplevel(redraw=False)
@@ -334,8 +337,8 @@ class Configurator:
     def _on_pipeline_created(self, pipeline):
         """Handle pipeline creation."""
         self._sync_pipeline_to_config()
+        self._on_step_selected(0, pipeline.general)
         self._update_pipeline()
-        self._update_editor()
 
     def _on_pipeline_loaded(self, pipeline):
         """Handle pipeline load."""
@@ -356,7 +359,8 @@ class Configurator:
     def _on_step_selected(self, index, step):
         """Handle step selection."""
         self.STEP_INDEX = index
-        self.STEP = step.step_type if hasattr(step, 'step_type') else "general"
+        self.STEP = step.step_type if hasattr(step, "step_type") else "general"
+        self._update_pipeline()
         self._update_editor()
 
     def _on_step_added(self, step):
@@ -764,7 +768,7 @@ class Configurator:
             messagebox.showerror(
                 parent=self.toplevel,
                 title="Error reading yaml file",
-                message=f"{error}"
+                message=f"{error}",
             )
             return
 
@@ -797,7 +801,7 @@ class Configurator:
             messagebox.showerror(
                 parent=self.toplevel,
                 title="Error saving configuration",
-                message=f"{error}"
+                message=f"{error}",
             )
             return
 
@@ -831,7 +835,7 @@ class Configurator:
             messagebox.showerror(
                 parent=self.toplevel,
                 title="Error saving configuration",
-                message=f"{error}"
+                message=f"{error}",
             )
 
     def quit(self):
@@ -900,10 +904,30 @@ class Configurator:
         index = int(option.split(".")[0])
         self.controller.select_step(index)
 
+    def _update_pipeline_names(self):
+        """Updates the text on the buttons in the pipeline window"""
+        labels = []
+        for i, v in self.CONFIG.items():
+            if i == 0:
+                labels.append(f"{i}. {v['step_type']}")
+            else:
+                labels.append(
+                    f"{i}. {v['step_general/step_name']} ({v['step_general/step_type']})"
+                )
+
+        for i, label in enumerate(labels):
+            row_i = i + 2
+            try:
+                button = self.pipeline.grid_slaves(row=row_i)[0]
+                button.config(text=label)
+            except IndexError:
+                continue
+
     def _update_pipeline(self):
         """Update the pipeline based on the current configuration.
         This does not remove the widgets, it just updates the text and command of the buttons.
         """
+        print("UPDATING PIPELINE...")
         #  Create all possible options for the pipeline based on the config file
         options = []
         for i, v in self.CONFIG.items():
@@ -927,12 +951,12 @@ class Configurator:
                 kw = {
                     "font": ctk.FONT,
                     "relief": "raised",
-                    "bg": self.theme.accent1,
-                    "fg": self.theme.accent1_fg,
+                    "bg": self.theme.bg,
+                    "fg": self.theme.fg,
                     # "h_bg": self.theme.accent1,
                     # "h_fg": self.theme.accent1_fg,
-                    # "activebackground": self.theme.accent1,
-                    # "activeforeground": self.theme.accent1_fg
+                    "activebackground": self.theme.accent1,
+                    "activeforeground": self.theme.accent1_fg,
                 }
             else:
                 kw = {
@@ -941,8 +965,8 @@ class Configurator:
                     "bg": self.theme.bg,
                     "fg": self.theme.fg,
                     # "highlightcolor": self.theme.accent1,
-                    # "activebackground": self.theme.bg,
-                    # "activeforeground": self.theme.fg,
+                    "activebackground": self.theme.bg,
+                    "activeforeground": self.theme.fg,
                 }
 
             # Create tooltip options and state
@@ -960,6 +984,7 @@ class Configurator:
 
             # If the row is the end of the pipeline, create a new button
             if row_i >= row or i == self.STEP_INDEX:
+                print("Creating new button for pipeline:", option, kw)
                 button = ctk.Button(
                     self.pipeline,
                     text=option,
@@ -984,6 +1009,7 @@ class Configurator:
 
             # If the row is not the end of the pipeline, update the button with the new option (in case it has changed)
             else:
+                print("Updating existing button for pipeline:", option, kw)
                 button = self.pipeline.grid_slaves(row_i)[0]
                 button.config(
                     text=option,
@@ -991,7 +1017,7 @@ class Configurator:
                     **kw,
                 )
 
-            # Change the state of tthe commands in the right click menu based on position
+            # Change the state of the commands in the right click menu based on position
             if i != 0:
                 for j, state in enumerate(right_click_states):
                     key = list(right_click_map.keys())[j]
@@ -1017,7 +1043,6 @@ class Configurator:
                 self.CONFIG[step_number]["step_general/step_number"] = str(step_number)
 
     def _update_editor(self):
-        # print("Updating editor...", self.STEP)
         # Create an empty frame dictionary that we will populate
         frames_dict = {}
         # Get current row and the step type
@@ -1184,7 +1209,7 @@ class Configurator:
         self.CONFIG[self.STEP_INDEX][string] = self.PYVARS[string].get()
         # print("Updated config:", self.CONFIG[self.STEP_INDEX][string])
         if "step_name" in string:
-            self._update_pipeline()
+            self._update_pipeline_names()
 
     def export_pipeline(self, yml_path, force_valid=True):
         """Export the pipeline to a yaml file.
