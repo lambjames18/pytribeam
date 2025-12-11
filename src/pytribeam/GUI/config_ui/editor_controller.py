@@ -306,7 +306,6 @@ class EditorController:
         if step is None:
             return False, f"Step at index {index} not found"
 
-        # Atrtribute MicroscopeInterface has no attribute specimen
         step_db = step.get_all_params(flat=False)
         result = self.validator.validate_step(microscope, step.name, step_db, general)
         success = result.success
