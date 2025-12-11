@@ -183,6 +183,8 @@ class PipelineConfig:
     def create_new(cls, version: float = None) -> "PipelineConfig":
         """Create new empty pipeline configuration.
 
+        Initializes general step with all parameters from LUT with default values.
+
         Args:
             version: Config file version (uses latest if not specified)
 
@@ -192,11 +194,24 @@ class PipelineConfig:
         if version is None:
             version = float(lut.VERSIONS[-1])
 
+        # Create temporary instance to use helper method
+        temp_pipeline = cls(
+            version=version,
+            general=StepConfig(index=0, step_type="general", name="general", parameters={}),
+            steps=[]
+        )
+
+        # Get all default parameters from general LUT
+        general_params = temp_pipeline._populate_default_parameters("general")
+
+        # Ensure step_count is set to 0
+        general_params["step_count"] = "0"
+
         general = StepConfig(
             index=0,
             step_type="general",
             name="general",
-            parameters={"step_count": "0"},  # Initialize step count
+            parameters=general_params,
         )
 
         return cls(version=version, general=general, steps=[])
@@ -205,8 +220,38 @@ class PipelineConfig:
         """Update step_count parameter in general step to reflect current step count."""
         self.general.set_param("step_count", str(len(self.steps)))
 
+    def _populate_default_parameters(self, step_type: str) -> Dict[str, str]:
+        """Populate parameters with default values from LUT.
+
+        Args:
+            step_type: Type of step (e.g., 'general', 'image', 'fib')
+
+        Returns:
+            Dictionary of parameter paths to default string values
+        """
+        try:
+            # Get LUT for this step type and version
+            step_lut = lut.get_lut(step_type.lower(), self.version)
+            step_lut_flat = deepcopy(step_lut)
+            step_lut_flat.flatten()
+
+            # Extract all parameters with their defaults
+            params = {}
+            for key, field in step_lut_flat.items():
+                # Convert default value to string for consistency
+                default_value = field.default if field.default is not None else ""
+                params[key] = str(default_value)
+
+            return params
+        except Exception as e:
+            # If LUT lookup fails, return empty dict
+            print(f"Warning: Failed to get LUT defaults for {step_type}: {e}")
+            return {}
+
     def add_step(self, step_type: str, name: Optional[str] = None) -> StepConfig:
         """Add new step to pipeline.
+
+        Initializes step with all parameters from LUT with default values.
 
         Args:
             step_type: Type of step to add (e.g., 'image', 'fib')
@@ -222,15 +267,21 @@ class PipelineConfig:
             count = sum(1 for s in self.steps if s.step_type == step_type)
             name = f"{step_type}_{count + 1}"
 
+        # Get all default parameters from LUT
+        parameters = self._populate_default_parameters(step_type)
+
+        # Override with step-specific values
+        parameters.update({
+            "step_general/step_type": step_type,
+            "step_general/step_name": name,
+            "step_general/step_number": str(index),
+        })
+
         step = StepConfig(
             index=index,
             step_type=step_type,
             name=name,
-            parameters={
-                "step_general/step_type": step_type,
-                "step_general/step_name": name,
-                "step_general/step_number": str(index),  # Set step number
-            },
+            parameters=parameters,
         )
 
         self.steps.append(step)
