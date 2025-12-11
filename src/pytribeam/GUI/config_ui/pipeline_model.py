@@ -13,6 +13,76 @@ import pytribeam.GUI.config_ui.lookup as lut
 import pytribeam.utilities as ut
 
 
+def _check_value_type(value: Any, dtype: type) -> Any:
+    """Convert value to correct type based on dtype.
+
+    Handles conversion from string representations to proper Python types.
+    Converts '', 'null', 'None' to None, 'True'/'true' to True, etc.
+
+    Args:
+        value: Value to convert (usually a string)
+        dtype: Target data type
+
+    Returns:
+        Converted value with correct type
+    """
+    if isinstance(value, str):
+        value = value.strip()
+
+    # Handle None values
+    if value in ["", "null", "None", None]:
+        return None
+
+    # If no dtype specified, return as-is
+    if dtype is None:
+        return value
+
+    # Handle booleans
+    if value in ["True", "true"]:
+        return True
+    elif value in ["False", "false"]:
+        return False
+
+    # Convert to target type
+    try:
+        return dtype(value)
+    except (ValueError, TypeError):
+        # If conversion fails, return original value
+        return value
+
+
+def _apply_type_conversion(params: Dict[str, Any], step_type: str, version: float) -> Dict[str, Any]:
+    """Apply type conversion to parameters based on LUT.
+
+    Args:
+        params: Flattened parameter dictionary (with "/" separators)
+        step_type: Step type (e.g., "general", "image", "fib")
+        version: Configuration version
+
+    Returns:
+        Dictionary with type-converted values
+    """
+    # Get LUT for this step type
+    try:
+        step_lut = lut.get_lut(step_type.lower(), version)
+        step_lut.flatten()
+    except Exception:
+        # If LUT not found, return params as-is
+        return params
+
+    converted = {}
+    for key, value in params.items():
+        if key in step_lut.keys():
+            # Get dtype from LUT and convert
+            dtype = step_lut[key].dtype
+            converted[key] = _check_value_type(value, dtype)
+        else:
+            # Keep parameters not in LUT as-is (they'll be filtered out later)
+            converted[key] = value
+
+    return converted
+
+
 @dataclass
 class StepConfig:
     """Configuration for a single pipeline step.
@@ -376,18 +446,29 @@ class PipelineConfig:
     def to_dict(self) -> Dict:
         """Convert pipeline to dictionary suitable for YAML export.
 
+        Applies type conversion based on LUT to ensure parameters have
+        correct types (int, float, str, bool) instead of all being strings.
+
         Returns:
             Dictionary with version, general, and steps
         """
-        # Convert general parameters
+        # Convert general parameters with type checking
         general_params = {}
         for key, value in self.general.parameters.items():
             if key != "step_type":
                 general_params[key] = value
 
+        # Apply type conversion based on LUT
+        general_params = _apply_type_conversion(general_params, "general", self.version)
+
+        # Remove any parameters not in LUT
+        general_lut = lut.get_lut("general", self.version)
+        general_lut.flatten()
+        general_params = {k: v for k, v in general_params.items() if k in general_lut.keys()}
+
         general_dict = unflatten_dict(general_params, sep="/")
 
-        # Convert steps
+        # Convert steps with type checking
         steps_dict = {}
         for step in self.steps:
             step_params = {}
@@ -397,6 +478,14 @@ class PipelineConfig:
 
             # Add step number
             step_params["step_general/step_number"] = step.index
+
+            # Apply type conversion based on LUT
+            step_params = _apply_type_conversion(step_params, step.step_type, self.version)
+
+            # Remove any parameters not in LUT
+            step_lut = lut.get_lut(step.step_type.lower(), self.version)
+            step_lut.flatten()
+            step_params = {k: v for k, v in step_params.items() if k in step_lut.keys() or k == "step_general/step_number"}
 
             steps_dict[step.name] = unflatten_dict(step_params, sep="/")
 
