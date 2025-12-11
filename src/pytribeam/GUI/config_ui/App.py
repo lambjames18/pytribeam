@@ -22,8 +22,7 @@ from pytribeam.GUI.config_ui.validator import ConfigValidator
 from pytribeam.GUI.config_ui.editor_controller import EditorController
 from pytribeam.GUI.config_ui.parameter_tracker import ParameterTracker
 
-### TODO: Need to fix full pipeline validation  ###
-### TODO: Make sure the microscope connection works properly ###
+# TODO: Test all functionality on an actual microscope
 
 
 class Popup:
@@ -133,7 +132,6 @@ class Configurator:
         # Initialize class variables (kept for backward compatibility during migration)
         self.STEP_INDEX = -1
         self.STEP = ""
-        self.CONFIG = {}
         self.clean_exit = False
         self.frames_dict = {}
         self.pipeline_buttons = {}
@@ -355,6 +353,16 @@ class Configurator:
             self.toplevel.title(f"TriBeam Configurator - {self.YAML_PATH}")
 
     def save_exit(self):
+        """Validate and save the current configuration and exit the application."""
+        # Sync CONFIG to pipeline model
+        self._sync_config_to_pipeline()
+
+        # Validate first, exiting if invalid
+        valid = self.validate_full()
+        if not valid:
+            return
+
+        # Get save path
         if self.YAML_PATH is None:
             yml_path = tk.filedialog.asksaveasfilename(
                 parent=self.toplevel,
@@ -371,8 +379,7 @@ class Configurator:
         else:
             yml_path = self.YAML_PATH
 
-        # Sync and save via controller
-        self._sync_config_to_pipeline()
+        # Save the configuration
         success, error = self.controller.save_pipeline(Path(yml_path))
         if success:
             self.clean_exit = True
@@ -403,9 +410,7 @@ class Configurator:
 
     def _on_pipeline_created(self, pipeline):
         """Handle pipeline creation."""
-        self._sync_pipeline_to_config()
         self._on_step_selected(0, pipeline.general)
-        self._update_pipeline()
 
     def _on_pipeline_loaded(self, pipeline):
         """Handle pipeline load."""
@@ -414,13 +419,11 @@ class Configurator:
         self.yml_version.trace_id = self.yml_version.trace_add(
             "write", self._yaml_version_updated
         )
-        self._sync_pipeline_to_config()
         self._update_pipeline()
         self._update_editor()
 
     def _on_pipeline_changed(self, pipeline):
         """Handle pipeline changes."""
-        self._sync_pipeline_to_config()
         self._update_pipeline()
 
     def _on_step_selected(self, index, step):
@@ -432,12 +435,10 @@ class Configurator:
 
     def _on_step_added(self, step):
         """Handle step addition."""
-        self._sync_pipeline_to_config()
         self._update_pipeline()
 
     def _on_step_removed(self, index):
         """Handle step removal."""
-        self._sync_pipeline_to_config()
         self._update_pipeline()
         # Select general or previous step
         new_index = max(0, index - 1)
@@ -445,10 +446,6 @@ class Configurator:
 
     def _on_parameter_changed(self, path, value):
         """Handle parameter change from controller."""
-        # Update CONFIG dict for backward compatibility
-        if self.STEP_INDEX >= 0 and self.STEP_INDEX in self.CONFIG:
-            self.CONFIG[self.STEP_INDEX][path] = str(value)
-
         # Mark configuration as unvalidated
         try:
             self.status_label.config(
@@ -459,6 +456,7 @@ class Configurator:
 
         # If step name changed, update pipeline display
         if "step_name" in path:
+            print("Step name changed, updating pipeline names")
             self._update_pipeline_names()
 
     def _on_step_validation_complete(self, index, success, message):
@@ -483,55 +481,6 @@ class Configurator:
             self.status_label.config(
                 text="INVALID", bg=self.theme.red, fg=self.theme.red_fg
             )
-
-    # -------- Syncing Between CONFIG and Pipeline Model -------- #
-
-    def _sync_pipeline_to_config(self):
-        """Sync pipeline model to CONFIG dict for backward compatibility."""
-        if self.controller.pipeline is None:
-            self.CONFIG = {}
-            return
-
-        pipeline = self.controller.pipeline
-        self.CONFIG = {}
-
-        # Sync general settings
-        general_dict = deepcopy(pipeline.general.parameters)
-        general_dict["step_type"] = "general"
-        self.CONFIG[0] = general_dict
-
-        # Sync steps
-        for i, step in enumerate(pipeline.steps, start=1):
-            step_dict = deepcopy(step.parameters)
-            self.CONFIG[i] = step_dict
-
-        # Make all values strings (for compatibility with existing UI code)
-        for step_idx in self.CONFIG.keys():
-            for key in self.CONFIG[step_idx].keys():
-                self.CONFIG[step_idx][key] = str(self.CONFIG[step_idx][key])
-
-    def _sync_config_to_pipeline(self):
-        """Sync CONFIG dict back to pipeline model before saving."""
-        if self.controller.pipeline is None or not self.CONFIG:
-            return
-
-        pipeline = self.controller.pipeline
-
-        # Sync general settings (index 0)
-        if 0 in self.CONFIG:
-            for key, value in self.CONFIG[0].items():
-                if key != "step_type":
-                    pipeline.general.set_param(key, value)
-
-        # Sync steps (index 1+)
-        for step_idx in sorted(self.CONFIG.keys()):
-            if step_idx == 0:
-                continue
-            # Steps are stored with index starting from 1, but pipeline.steps is 0-indexed
-            step = pipeline.get_step(step_idx)
-            if step:
-                for key, value in self.CONFIG[step_idx].items():
-                    step.set_param(key, value)
 
     # -------- Microscope Connection -------- #
 
@@ -927,9 +876,6 @@ class Configurator:
                 return
             self.YAML_PATH = yml_path
 
-        # Sync CONFIG dict back to pipeline model before saving
-        self._sync_config_to_pipeline()
-
         # Save via controller
         success, error = self.controller.save_pipeline(Path(self.YAML_PATH))
         if not success:
@@ -998,14 +944,14 @@ class Configurator:
 
     def _update_pipeline_names(self):
         """Updates the text on the buttons in the pipeline window"""
-        labels = []
-        for i, v in self.CONFIG.items():
-            if i == 0:
-                labels.append(f"{i}. {v['step_type']}")
-            else:
-                labels.append(
-                    f"{i}. {v['step_general/step_name']} ({v['step_general/step_type']})"
-                )
+        labels = ["0. general"]
+        labels.extend(
+            [
+                f"{i+1}. {s.name} ({s.step_type})"
+                for i, s in enumerate(self.controller.pipeline.steps)
+            ]
+        )
+        print(labels)
 
         for i, label in enumerate(labels):
             row_i = i + 2
@@ -1020,14 +966,13 @@ class Configurator:
         This does not remove the widgets, it just updates the text and command of the buttons.
         """
         #  Create all possible options for the pipeline based on the config file
-        options = []
-        for i, v in self.CONFIG.items():
-            if i == 0:
-                options.append(f"{i}. {v['step_type']}")
-            else:
-                options.append(
-                    f"{i}. {v['step_general/step_name']} ({v['step_general/step_type']})"
-                )
+        options = ["0. general"]
+        options.extend(
+            [
+                f"{i+1}. {s.name} ({s.step_type})"
+                for i, s in enumerate(self.controller.pipeline.steps)
+            ]
+        )
         # Get the maximum row of the current pipeline
         try:
             _, row = self.pipeline.grid_size()
@@ -1126,10 +1071,6 @@ class Configurator:
         ctk.utils.scroll_with_mousewheel(
             self.pipeline, self.pipeline.canvas, apply_to_children=True
         )
-        # Update the step numbers in the config file
-        for step_number in self.CONFIG.keys():
-            if step_number != 0:
-                self.CONFIG[step_number]["step_general/step_number"] = str(step_number)
 
     # -------- Editor Operations -------- #
 
@@ -1229,10 +1170,6 @@ class Configurator:
             dtype=value.dtype,
             default=value.default,
         )
-
-        # Ensure the parameter exists in CONFIG dict for backward compatibility
-        if path not in self.CONFIG[self.STEP_INDEX].keys():
-            self.CONFIG[self.STEP_INDEX][path] = str(value.default)
 
         # Create the widgets and place them on the grid
         kwargs = deepcopy(value.widget_kwargs)
