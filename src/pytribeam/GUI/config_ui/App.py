@@ -22,6 +22,10 @@ from pytribeam.GUI.config_ui.validator import ConfigValidator
 from pytribeam.GUI.config_ui.editor_controller import EditorController
 from pytribeam.GUI.config_ui.parameter_tracker import ParameterTracker
 
+### TODO: Update step number in the editor when steps are added/removed/reordered, the field is empty from the LUT by default and must be updated during editing ###
+### TODO: Step count is not updating in the general step and therefore causing validation errors ###
+### TODO: Get microscope connection working properly ###
+
 
 class Popup:
     def __init__(self, master=None, title="Popup", message=""):
@@ -454,9 +458,10 @@ class Configurator:
     def _create_microscope_connection(self):
         """Create microscope interface with connection settings from config."""
         status, general_set = self.validate_general(return_config=True, suppress=True)
+        print(status, general_set)
         if status:
-            host = general_set["general"]["connection_host"]
-            port = general_set["general"]["connection_port"]
+            host = general_set["connection_host"]
+            port = general_set["connection_port"]
         else:
             host = "localhost"
             port = ""
