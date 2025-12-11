@@ -64,24 +64,24 @@ class ConfigValidator:
         """
         try:
             general_set = factory.general(
-                config_dict["general"],
+                config_dict,
                 yml_format=self._yml_format,
             )
             return ValidationResult(
                 success=True,
-                step_name="General",
+                step_name="general",
             )
         except KeyError as e:
             return ValidationResult(
                 success=False,
-                step_name="General",
+                step_name="general",
                 message=f"Missing required field: {e}",
                 exception=e,
             )
         except Exception as e:
             return ValidationResult(
                 success=False,
-                step_name="General",
+                step_name="general",
                 message=f"{type(e).__name__}: {str(e)}",
                 exception=e,
             )

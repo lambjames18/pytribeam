@@ -264,7 +264,7 @@ class EditorController:
         success, summary = ConfigValidator.get_summary(results)
         return success, summary
 
-    def validate_full(self, microscope=None) -> Tuple[bool, str]:
+    def validate_full(self) -> Tuple[bool, str]:
         """Validate full pipeline configuration.
 
         Args:
@@ -276,10 +276,53 @@ class EditorController:
         if self.pipeline is None:
             return False, "No pipeline loaded"
 
-        results = self.validator.validate_pipeline_model(self.pipeline, microscope)
+        results = self.validator.validate_pipeline_model(self.pipeline)
         success, summary = ConfigValidator.get_summary(results)
-        self._notify("validation_complete", success, summary)
+        self._notify("pipeline_validation_complete", success, summary)
         return success, summary
+
+    def validate_step(self, index: int, microscope=None) -> Tuple[bool, str]:
+        """Validate specific step configuration.
+
+        Args:
+            index: Index of step to validate
+            microscope: Optional microscope connection
+
+        Returns:
+            Tuple of (is_valid, message)
+        """
+        # Make sure pipeline is loaded
+        if self.pipeline is None:
+            return False, "No pipeline loaded"
+
+        # Get the step of interest
+        step = self.pipeline.get_step(index)
+        if step is None:
+            return False, f"Step at index {index} not found"
+
+        result = self.validator.validate_step(step.parameters, microscope)
+        success = result.success
+        message = (
+            "Step is valid." if success else f"Step validation failed: {result.message}"
+        )
+        self._notify("step_validation_complete", index, success, message)
+        return success, message
+
+    def validate_general(self) -> Tuple[bool, str]:
+        """Validate general configuration.
+
+        Returns:
+            Tuple of (is_valid, message)
+        """
+        result = self.validator.validate_general(self.pipeline.general.parameters)
+        success = result.success
+        message = (
+            "General configuration is valid."
+            if success
+            else f"General validation failed: {result.message}"
+        )
+        self._notify("step_validation_complete", 0, success, message)
+        return success, message
 
     def get_step_count(self) -> int:
         """Get number of steps in pipeline.
