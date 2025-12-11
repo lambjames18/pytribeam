@@ -6,7 +6,7 @@ separated from the UI presentation layer.
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Callable, Dict, Optional, Any
+from typing import Callable, Dict, Optional, Any, Tuple, List
 import tkinter as tk
 
 import pytribeam.GUI.config_ui.lookup as lut
@@ -75,10 +75,10 @@ class EditorController:
 
         self.pipeline = PipelineConfig.create_new(version=version)
         self.current_step_index = 0
-        self._notify('pipeline_created', self.pipeline)
-        self._notify('step_selected', 0, self.pipeline.general)
+        self._notify("pipeline_created", self.pipeline)
+        self._notify("step_selected", 0, self.pipeline.general)
 
-    def load_pipeline(self, yaml_path: Path) -> tuple[bool, Optional[str]]:
+    def load_pipeline(self, yaml_path: Path) -> Tuple[bool, Optional[str]]:
         """Load pipeline from YAML file.
 
         Args:
@@ -91,13 +91,13 @@ class EditorController:
             self.pipeline = PipelineConfig.from_yaml(yaml_path)
             self.current_step_index = 0
             self._version = self.pipeline.version
-            self._notify('pipeline_loaded', self.pipeline)
-            self._notify('step_selected', 0, self.pipeline.general)
+            self._notify("pipeline_loaded", self.pipeline)
+            self._notify("step_selected", 0, self.pipeline.general)
             return True, None
         except Exception as e:
             return False, str(e)
 
-    def save_pipeline(self, yaml_path: Path) -> tuple[bool, Optional[str]]:
+    def save_pipeline(self, yaml_path: Path) -> Tuple[bool, Optional[str]]:
         """Save pipeline to YAML file.
 
         Args:
@@ -111,7 +111,7 @@ class EditorController:
 
         try:
             self.pipeline.to_yaml(yaml_path)
-            self._notify('pipeline_saved', yaml_path)
+            self._notify("pipeline_saved", yaml_path)
             return True, None
         except Exception as e:
             return False, str(e)
@@ -129,8 +129,8 @@ class EditorController:
             raise ValueError("No pipeline loaded")
 
         step = self.pipeline.add_step(step_type)
-        self._notify('pipeline_changed', self.pipeline)
-        self._notify('step_added', step)
+        self._notify("pipeline_changed", self.pipeline)
+        self._notify("step_added", step)
         return step
 
     def remove_step(self, index: int) -> bool:
@@ -153,8 +153,8 @@ class EditorController:
             elif self.current_step_index > index:
                 self.current_step_index -= 1
 
-            self._notify('pipeline_changed', self.pipeline)
-            self._notify('step_removed', index)
+            self._notify("pipeline_changed", self.pipeline)
+            self._notify("step_removed", index)
         return success
 
     def move_step(self, index: int, direction: int) -> bool:
@@ -178,8 +178,8 @@ class EditorController:
             elif abs(self.current_step_index - index) == 1:
                 self.current_step_index -= direction
 
-            self._notify('pipeline_changed', self.pipeline)
-            self._notify('step_moved', index, direction)
+            self._notify("pipeline_changed", self.pipeline)
+            self._notify("step_moved", index, direction)
         return success
 
     def duplicate_step(self, index: int) -> Optional[StepConfig]:
@@ -196,8 +196,8 @@ class EditorController:
 
         step = self.pipeline.duplicate_step(index)
         if step:
-            self._notify('pipeline_changed', self.pipeline)
-            self._notify('step_added', step)
+            self._notify("pipeline_changed", self.pipeline)
+            self._notify("step_added", step)
         return step
 
     def select_step(self, index: int):
@@ -212,7 +212,7 @@ class EditorController:
         step = self.pipeline.get_step(index)
         if step:
             self.current_step_index = index
-            self._notify('step_selected', index, step)
+            self._notify("step_selected", index, step)
 
     def get_current_step(self) -> Optional[StepConfig]:
         """Get currently selected step.
@@ -234,7 +234,7 @@ class EditorController:
         step = self.get_current_step()
         if step:
             step.set_param(path, str(value))
-            self._notify('parameter_changed', path, value)
+            self._notify("parameter_changed", path, value)
 
     def get_parameter(self, path: str, default: Any = None) -> Any:
         """Get parameter value from current step.
@@ -251,7 +251,7 @@ class EditorController:
             return step.get_param(path, default)
         return default
 
-    def validate_structure(self) -> tuple[bool, str]:
+    def validate_structure(self) -> Tuple[bool, str]:
         """Validate pipeline structure (names, step count).
 
         Returns:
@@ -264,7 +264,7 @@ class EditorController:
         success, summary = ConfigValidator.get_summary(results)
         return success, summary
 
-    def validate_full(self, microscope=None) -> tuple[bool, str]:
+    def validate_full(self, microscope=None) -> Tuple[bool, str]:
         """Validate full pipeline configuration.
 
         Args:
@@ -278,7 +278,7 @@ class EditorController:
 
         results = self.validator.validate_pipeline_model(self.pipeline, microscope)
         success, summary = ConfigValidator.get_summary(results)
-        self._notify('validation_complete', success, summary)
+        self._notify("validation_complete", success, summary)
         return success, summary
 
     def get_step_count(self) -> int:
@@ -291,7 +291,7 @@ class EditorController:
             return 0
         return self.pipeline.get_step_count()
 
-    def get_step_names(self) -> list[str]:
+    def get_step_names(self) -> List[str]:
         """Get list of step names.
 
         Returns:
@@ -318,8 +318,8 @@ class EditorController:
         if step:
             step.name = new_name
             step.set_param("step_general/step_name", new_name)
-            self._notify('pipeline_changed', self.pipeline)
-            self._notify('step_renamed', index, new_name)
+            self._notify("pipeline_changed", self.pipeline)
+            self._notify("step_renamed", index, new_name)
             return True
         return False
 
@@ -332,7 +332,7 @@ class EditorController:
         self._version = version
         if self.pipeline:
             self.pipeline.version = version
-            self._notify('version_changed', version)
+            self._notify("version_changed", version)
 
     def get_version(self) -> float:
         """Get current configuration version.
@@ -360,17 +360,19 @@ class EditorController:
         """
         if self.pipeline is None:
             return {
-                'version': self._version,
-                'step_count': 0,
-                'has_general': False,
-                'step_types': [],
+                "version": self._version,
+                "step_count": 0,
+                "has_general": False,
+                "step_types": [],
             }
 
         step_types = [step.step_type for step in self.pipeline.steps]
         return {
-            'version': self.pipeline.version,
-            'step_count': len(self.pipeline.steps),
-            'has_general': True,
-            'step_types': step_types,
-            'file_path': str(self.pipeline.file_path) if self.pipeline.file_path else None,
+            "version": self.pipeline.version,
+            "step_count": len(self.pipeline.steps),
+            "has_general": True,
+            "step_types": step_types,
+            "file_path": (
+                str(self.pipeline.file_path) if self.pipeline.file_path else None
+            ),
         }
