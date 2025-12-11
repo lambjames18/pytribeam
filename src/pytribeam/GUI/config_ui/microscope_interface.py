@@ -75,7 +75,7 @@ class MicroscopeInterface:
                 connection_host=self.host,
                 connection_port=self.port,
             )
-        except Exception as e:
+        except ConnectionError as e:
             self._microscope = None
             raise MicroscopeConnectionError(
                 f"Failed to connect to microscope at {self.host}:{self.port}"

@@ -62,11 +62,14 @@ class ConfigValidator:
         Returns:
             ValidationResult indicating success or failure
         """
+        print("Validating general configuration...")
+        print(config_dict)
         try:
             general_set = factory.general(
                 config_dict,
                 yml_format=self._yml_format,
             )
+            print(general_set)
             return ValidationResult(
                 success=True,
                 step_name="general",
@@ -79,6 +82,7 @@ class ConfigValidator:
                 exception=e,
             )
         except Exception as e:
+            print("Error during general validation:", e)
             return ValidationResult(
                 success=False,
                 step_name="general",

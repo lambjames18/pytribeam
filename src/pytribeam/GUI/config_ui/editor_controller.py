@@ -300,7 +300,7 @@ class EditorController:
         if step is None:
             return False, f"Step at index {index} not found"
 
-        result = self.validator.validate_step(step.parameters, microscope)
+        result = self.validator.validate_step(step.get_all_params(), microscope)
         success = result.success
         message = (
             "Step is valid." if success else f"Step validation failed: {result.message}"
@@ -314,7 +314,7 @@ class EditorController:
         Returns:
             Tuple of (is_valid, message)
         """
-        result = self.validator.validate_general(self.pipeline.general.parameters)
+        result = self.validator.validate_general(self.pipeline.general.get_all_params())
         success = result.success
         message = (
             "General configuration is valid."

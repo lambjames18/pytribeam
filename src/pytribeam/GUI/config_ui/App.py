@@ -1298,7 +1298,7 @@ class Configurator:
         # Get step index
         step_index = self.STEP_INDEX
         if step_index == 0:
-            self.validate_general(return_config=False)
+            self.validate_general()
             return
 
         # Get microscope connection

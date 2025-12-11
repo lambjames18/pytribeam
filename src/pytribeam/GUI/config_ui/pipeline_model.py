@@ -51,7 +51,9 @@ def _check_value_type(value: Any, dtype: type) -> Any:
         return value
 
 
-def _apply_type_conversion(params: Dict[str, Any], step_type: str, version: float) -> Dict[str, Any]:
+def _apply_type_conversion(
+    params: Dict[str, Any], step_type: str, version: float
+) -> Dict[str, Any]:
     """Apply type conversion to parameters based on LUT.
 
     Args:
@@ -101,6 +103,7 @@ class StepConfig:
     step_type: str
     name: str
     parameters: Dict[str, Any] = field(default_factory=dict)
+    version: float = field(default=float(lut.VERSIONS[-1]))
 
     def get_param(self, path: str, default: Any = None) -> Any:
         """Get parameter value by path.
@@ -140,7 +143,9 @@ class StepConfig:
         Returns:
             Copy of parameters dictionary
         """
-        return deepcopy(self.parameters)
+        return _apply_type_conversion(
+            deepcopy(self.parameters), self.step_type, self.version
+        )
 
     def update_params(self, params: Dict[str, Any]):
         """Update multiple parameters at once.
@@ -155,9 +160,7 @@ class StepConfig:
         self.parameters.clear()
 
     def __repr__(self) -> str:
-        return (
-            f"StepConfig(index={self.index}, type={self.step_type}, name={self.name})"
-        )
+        return f"StepConfig(index={self.index}, type={self.step_type}, name={self.name}), version={self.version}"
 
 
 @dataclass
@@ -197,8 +200,14 @@ class PipelineConfig:
         # Create temporary instance to use helper method
         temp_pipeline = cls(
             version=version,
-            general=StepConfig(index=0, step_type="general", name="general", parameters={}),
-            steps=[]
+            general=StepConfig(
+                index=0,
+                step_type="general",
+                name="general",
+                parameters={},
+                version=version,
+            ),
+            steps=[],
         )
 
         # Get all default parameters from general LUT
@@ -271,17 +280,20 @@ class PipelineConfig:
         parameters = self._populate_default_parameters(step_type)
 
         # Override with step-specific values
-        parameters.update({
-            "step_general/step_type": step_type,
-            "step_general/step_name": name,
-            "step_general/step_number": str(index),
-        })
+        parameters.update(
+            {
+                "step_general/step_type": step_type,
+                "step_general/step_name": name,
+                "step_general/step_number": str(index),
+            }
+        )
 
         step = StepConfig(
             index=index,
             step_type=step_type,
             name=name,
             parameters=parameters,
+            version=self.version,
         )
 
         self.steps.append(step)
@@ -465,6 +477,7 @@ class PipelineConfig:
             step_type="general",
             name="general",
             parameters={k: str(v) for k, v in general_flat.items()},
+            version=float(yml_version),
         )
 
         # Extract steps
@@ -487,6 +500,7 @@ class PipelineConfig:
                     step_type=step_type,
                     name=step_name,
                     parameters={k: str(v) for k, v in flat_step.items()},
+                    version=float(yml_version),
                 )
                 steps_list.append(step)
 
@@ -537,7 +551,9 @@ class PipelineConfig:
         # Remove any parameters not in LUT
         general_lut = lut.get_lut("general", self.version)
         general_lut.flatten()
-        general_params = {k: v for k, v in general_params.items() if k in general_lut.keys()}
+        general_params = {
+            k: v for k, v in general_params.items() if k in general_lut.keys()
+        }
 
         general_dict = unflatten_dict(general_params, sep="/")
 
@@ -553,12 +569,18 @@ class PipelineConfig:
             step_params["step_general/step_number"] = step.index
 
             # Apply type conversion based on LUT
-            step_params = _apply_type_conversion(step_params, step.step_type, self.version)
+            step_params = _apply_type_conversion(
+                step_params, step.step_type, self.version
+            )
 
             # Remove any parameters not in LUT
             step_lut = lut.get_lut(step.step_type.lower(), self.version)
             step_lut.flatten()
-            step_params = {k: v for k, v in step_params.items() if k in step_lut.keys() or k == "step_general/step_number"}
+            step_params = {
+                k: v
+                for k, v in step_params.items()
+                if k in step_lut.keys() or k == "step_general/step_number"
+            }
 
             steps_dict[step.name] = unflatten_dict(step_params, sep="/")
 
