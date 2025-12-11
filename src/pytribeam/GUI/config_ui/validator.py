@@ -5,7 +5,7 @@ separating validation concerns from UI concerns.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Union
 
 import pytribeam.factory as factory
 import pytribeam.types as tbt
@@ -23,12 +23,21 @@ class ValidationResult:
         step_name: Name of step validated
         message: Detailed message (usually for failures)
         exception: Original exception if validation failed
+        settings: Validated settings object (if applicable)
     """
 
     success: bool
     step_name: str
     message: str = ""
     exception: Optional[Exception] = None
+    settings: Union[
+        tbt.CustomSettings,
+        tbt.EBSDSettings,
+        tbt.EDSSettings,
+        tbt.ImageSettings,
+        tbt.FIBSettings,
+        tbt.LaserSettings,
+    ] = None
 
     def __str__(self) -> str:
         """Get human-readable string representation."""
@@ -64,24 +73,25 @@ class ConfigValidator:
         """
         try:
             general_set = factory.general(
-                config_dict["general"],
+                config_dict,
                 yml_format=self._yml_format,
             )
             return ValidationResult(
                 success=True,
-                step_name="General",
+                step_name="general",
+                settings=general_set,
             )
         except KeyError as e:
             return ValidationResult(
                 success=False,
-                step_name="General",
+                step_name="general",
                 message=f"Missing required field: {e}",
                 exception=e,
             )
         except Exception as e:
             return ValidationResult(
                 success=False,
-                step_name="General",
+                step_name="general",
                 message=f"{type(e).__name__}: {str(e)}",
                 exception=e,
             )
@@ -105,7 +115,7 @@ class ConfigValidator:
             ValidationResult indicating success or failure
         """
         try:
-            _ = factory.step(
+            step_settings = factory.step(
                 microscope,
                 step_name=step_name,
                 step_settings=step_config,
@@ -113,8 +123,7 @@ class ConfigValidator:
                 yml_format=self._yml_format,
             )
             return ValidationResult(
-                success=True,
-                step_name=step_name,
+                success=True, step_name=step_name, settings=step_settings
             )
         except KeyError as e:
             return ValidationResult(
@@ -148,7 +157,8 @@ class ConfigValidator:
         results = []
 
         # Validate general first
-        general_result = self.validate_general(config_dict)
+        general_db = config_dict.get("general", {})
+        general_result = self.validate_general(general_db)
         results.append(general_result)
 
         if not general_result.success:
@@ -222,7 +232,6 @@ class ConfigValidator:
     def validate_pipeline_model(
         self,
         pipeline: PipelineConfig,
-        microscope: Optional[tbt.Microscope] = None,
     ) -> List[ValidationResult]:
         """Validate a PipelineConfig model.
 
@@ -236,7 +245,7 @@ class ConfigValidator:
             List of ValidationResult objects
         """
         config_dict = pipeline.to_dict()
-        return self.validate_full_pipeline(config_dict, microscope)
+        return self.validate_full_pipeline(config_dict)
 
     def check_duplicate_names(self, pipeline: PipelineConfig) -> ValidationResult:
         """Check for duplicate step names.

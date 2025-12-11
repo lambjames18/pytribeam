@@ -13,6 +13,78 @@ import pytribeam.GUI.config_ui.lookup as lut
 import pytribeam.utilities as ut
 
 
+def _check_value_type(value: Any, dtype: type) -> Any:
+    """Convert value to correct type based on dtype.
+
+    Handles conversion from string representations to proper Python types.
+    Converts '', 'null', 'None' to None, 'True'/'true' to True, etc.
+
+    Args:
+        value: Value to convert (usually a string)
+        dtype: Target data type
+
+    Returns:
+        Converted value with correct type
+    """
+    if isinstance(value, str):
+        value = value.strip()
+
+    # Handle None values
+    if value in ["", "null", "None", None]:
+        return None
+
+    # If no dtype specified, return as-is
+    if dtype is None:
+        return value
+
+    # Handle booleans
+    if value in ["True", "true"]:
+        return True
+    elif value in ["False", "false"]:
+        return False
+
+    # Convert to target type
+    try:
+        return dtype(value)
+    except (ValueError, TypeError):
+        # If conversion fails, return original value
+        return value
+
+
+def _apply_type_conversion(
+    params: Dict[str, Any], step_type: str, version: float
+) -> Dict[str, Any]:
+    """Apply type conversion to parameters based on LUT.
+
+    Args:
+        params: Flattened parameter dictionary (with "/" separators)
+        step_type: Step type (e.g., "general", "image", "fib")
+        version: Configuration version
+
+    Returns:
+        Dictionary with type-converted values
+    """
+    # Get LUT for this step type
+    try:
+        step_lut = lut.get_lut(step_type.lower(), version)
+        step_lut.flatten()
+    except Exception:
+        # If LUT not found, return params as-is
+        return params
+
+    converted = {}
+    for key, value in params.items():
+        if key in step_lut.keys():
+            # Get dtype from LUT and convert
+            dtype = step_lut[key].dtype
+            converted[key] = _check_value_type(value, dtype)
+        else:
+            # Keep parameters not in LUT as-is (they'll be filtered out later)
+            converted[key] = value
+
+    return converted
+
+
 @dataclass
 class StepConfig:
     """Configuration for a single pipeline step.
@@ -25,12 +97,14 @@ class StepConfig:
         step_type: Type of step (e.g., 'image', 'fib', 'laser')
         name: Unique name for this step
         parameters: Flattened dictionary of step parameters
+        version: Configuration file version
     """
 
     index: int
     step_type: str
     name: str
     parameters: Dict[str, Any] = field(default_factory=dict)
+    version: float = field(default=float(lut.VERSIONS[-1]))
 
     def get_param(self, path: str, default: Any = None) -> Any:
         """Get parameter value by path.
@@ -64,13 +138,19 @@ class StepConfig:
         """
         return path in self.parameters
 
-    def get_all_params(self) -> Dict[str, Any]:
+    def get_all_params(self, flat: bool = True) -> Dict[str, Any]:
         """Get all parameters as dictionary.
 
         Returns:
             Copy of parameters dictionary
         """
-        return deepcopy(self.parameters)
+        db = _apply_type_conversion(
+            deepcopy(self.parameters), self.step_type, self.version
+        )
+        if flat:
+            return db
+        else:
+            return unflatten_dict(db, sep="/")
 
     def update_params(self, params: Dict[str, Any]):
         """Update multiple parameters at once.
@@ -85,9 +165,7 @@ class StepConfig:
         self.parameters.clear()
 
     def __repr__(self) -> str:
-        return (
-            f"StepConfig(index={self.index}, type={self.step_type}, name={self.name})"
-        )
+        return f"StepConfig(index={self.index}, type={self.step_type}, name={self.name}), version={self.version}"
 
 
 @dataclass
@@ -113,6 +191,8 @@ class PipelineConfig:
     def create_new(cls, version: float = None) -> "PipelineConfig":
         """Create new empty pipeline configuration.
 
+        Initializes general step with all parameters from LUT with default values.
+
         Args:
             version: Config file version (uses latest if not specified)
 
@@ -122,17 +202,70 @@ class PipelineConfig:
         if version is None:
             version = float(lut.VERSIONS[-1])
 
+        # Create temporary instance to use helper method
+        temp_pipeline = cls(
+            version=version,
+            general=StepConfig(
+                index=0,
+                step_type="general",
+                name="general",
+                parameters={},
+                version=version,
+            ),
+            steps=[],
+        )
+
+        # Get all default parameters from general LUT
+        general_params = temp_pipeline._populate_default_parameters("general")
+
+        # Ensure step_count is set to 0
+        general_params["step_count"] = "0"
+
         general = StepConfig(
             index=0,
             step_type="general",
             name="general",
-            parameters={},
+            parameters=general_params,
         )
 
         return cls(version=version, general=general, steps=[])
 
+    def _update_step_count(self):
+        """Update step_count parameter in general step to reflect current step count."""
+        self.general.set_param("step_count", str(len(self.steps)))
+
+    def _populate_default_parameters(self, step_type: str) -> Dict[str, str]:
+        """Populate parameters with default values from LUT.
+
+        Args:
+            step_type: Type of step (e.g., 'general', 'image', 'fib')
+
+        Returns:
+            Dictionary of parameter paths to default string values
+        """
+        try:
+            # Get LUT for this step type and version
+            step_lut = lut.get_lut(step_type.lower(), self.version)
+            step_lut_flat = deepcopy(step_lut)
+            step_lut_flat.flatten()
+
+            # Extract all parameters with their defaults
+            params = {}
+            for key, field in step_lut_flat.items():
+                # Convert default value to string for consistency
+                default_value = field.default if field.default is not None else ""
+                params[key] = str(default_value)
+
+            return params
+        except Exception as e:
+            # If LUT lookup fails, return empty dict
+            print(f"Warning: Failed to get LUT defaults for {step_type}: {e}")
+            return {}
+
     def add_step(self, step_type: str, name: Optional[str] = None) -> StepConfig:
         """Add new step to pipeline.
+
+        Initializes step with all parameters from LUT with default values.
 
         Args:
             step_type: Type of step to add (e.g., 'image', 'fib')
@@ -148,17 +281,31 @@ class PipelineConfig:
             count = sum(1 for s in self.steps if s.step_type == step_type)
             name = f"{step_type}_{count + 1}"
 
+        # Get all default parameters from LUT
+        parameters = self._populate_default_parameters(step_type)
+
+        # Override with step-specific values
+        parameters.update(
+            {
+                "step_general/step_type": step_type,
+                "step_general/step_name": name,
+                "step_general/step_number": str(index),
+            }
+        )
+
         step = StepConfig(
             index=index,
             step_type=step_type,
             name=name,
-            parameters={
-                "step_general/step_type": step_type,
-                "step_general/step_name": name,
-            },
+            parameters=parameters,
+            version=self.version,
         )
 
         self.steps.append(step)
+
+        # Update step count in general
+        self._update_step_count()
+
         return step
 
     def remove_step(self, index: int) -> bool:
@@ -182,6 +329,9 @@ class PipelineConfig:
         for i, step in enumerate(self.steps, 1):
             step.index = i
             step.set_param("step_general/step_number", str(i))
+
+        # Update step count in general
+        self._update_step_count()
 
         return True
 
@@ -241,6 +391,10 @@ class PipelineConfig:
         new_step.set_param("step_general/step_number", str(new_step.index))
 
         self.steps.append(new_step)
+
+        # Update step count in general
+        self._update_step_count()
+
         return new_step
 
     def get_step(self, index: int) -> Optional[StepConfig]:
@@ -328,6 +482,7 @@ class PipelineConfig:
             step_type="general",
             name="general",
             parameters={k: str(v) for k, v in general_flat.items()},
+            version=float(yml_version),
         )
 
         # Extract steps
@@ -350,18 +505,25 @@ class PipelineConfig:
                     step_type=step_type,
                     name=step_name,
                     parameters={k: str(v) for k, v in flat_step.items()},
+                    version=float(yml_version),
                 )
                 steps_list.append(step)
 
             # Sort by step number
             steps_list.sort(key=lambda s: s.index)
 
-        return cls(
+        # Create pipeline instance
+        pipeline = cls(
             version=float(yml_version),
             general=general,
             steps=steps_list,
             file_path=yaml_path,
         )
+
+        # Ensure step_count in general is accurate
+        pipeline._update_step_count()
+
+        return pipeline
 
     def to_yaml(self, yaml_path: Path):
         """Save pipeline configuration to YAML file.
@@ -376,18 +538,31 @@ class PipelineConfig:
     def to_dict(self) -> Dict:
         """Convert pipeline to dictionary suitable for YAML export.
 
+        Applies type conversion based on LUT to ensure parameters have
+        correct types (int, float, str, bool) instead of all being strings.
+
         Returns:
             Dictionary with version, general, and steps
         """
-        # Convert general parameters
+        # Convert general parameters with type checking
         general_params = {}
         for key, value in self.general.parameters.items():
             if key != "step_type":
                 general_params[key] = value
 
+        # Apply type conversion based on LUT
+        general_params = _apply_type_conversion(general_params, "general", self.version)
+
+        # Remove any parameters not in LUT
+        general_lut = lut.get_lut("general", self.version)
+        general_lut.flatten()
+        general_params = {
+            k: v for k, v in general_params.items() if k in general_lut.keys()
+        }
+
         general_dict = unflatten_dict(general_params, sep="/")
 
-        # Convert steps
+        # Convert steps with type checking
         steps_dict = {}
         for step in self.steps:
             step_params = {}
@@ -397,6 +572,20 @@ class PipelineConfig:
 
             # Add step number
             step_params["step_general/step_number"] = step.index
+
+            # Apply type conversion based on LUT
+            step_params = _apply_type_conversion(
+                step_params, step.step_type, self.version
+            )
+
+            # Remove any parameters not in LUT
+            step_lut = lut.get_lut(step.step_type.lower(), self.version)
+            step_lut.flatten()
+            step_params = {
+                k: v
+                for k, v in step_params.items()
+                if k in step_lut.keys() or k == "step_general/step_number"
+            }
 
             steps_dict[step.name] = unflatten_dict(step_params, sep="/")
 
