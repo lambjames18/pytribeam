@@ -172,6 +172,9 @@ BeamLimits(NamedTuple)
 ElectronBeam(Beam)
     The specific beam type 'electron'.
 
+EDAXConfig(NamedTuple)
+    EDAX configuration settings.
+
 GeneralSettings(NamedTuple)
     General settings object.
 
@@ -1638,6 +1641,20 @@ class EdaxEdsDetectorSlideStatus(Enum):
     UNKNOWN: str = "unknown"
 
 
+class EmailUpdateConfig(NamedTuple):
+    """Email configuration for sending notifications"""
+
+    ssh_host: str
+    ssh_port: int
+    ssh_user: str
+    ssh_key_path: str
+    smtp_server: str
+    smtp_port: int
+    sender: str
+    sender_password: str
+    recipients: List[str]
+
+
 ### DERIVED CLASSES ###
 
 
@@ -1707,6 +1724,14 @@ class ElectronBeam(Beam):
     device: Device = Device.ELECTRON_BEAM
 
 
+class EDAXConfig(NamedTuple):
+    """General configuration for EDAX"""
+
+    save_directory: Path  # on EDAX computer
+    project_name: str
+    connection: MicroscopeConnection = None
+
+
 class GeneralSettings(NamedTuple):
     """
     General settings object.
@@ -1756,6 +1781,8 @@ class GeneralSettings(NamedTuple):
     exp_dir: Path
     h5_log_name: str
     step_count: int
+    email_update_settings: EmailUpdateConfig = None
+    EDAX_settings: EDAXConfig = None
 
     @property
     def log_filepath(self) -> Path:
@@ -2168,6 +2195,9 @@ class EBSDSettings(NamedTuple):
     image: ImageSettings
     enable_eds: bool
     enable_ebsd: bool = True
+    scan_box: EBSDScanBox = None
+    grid_type: int = EBSDGridType.SQUARE
+    save_patterns: bool = True
 
 
 class EDSSettings(NamedTuple):
@@ -2567,6 +2597,101 @@ class YMLFormatVersion(YMLFormat, Enum):
         },
         # custom_step_settings={
         #     "script_path": Path,
-        #     "script_type": ScriptType,
+        #     "executable_path": Path,
+        # }
+    )
+    V_1_1 = YMLFormat(
+        version=1.1,
+        # general settings
+        general_section_key="general",
+        non_step_section_count=2,
+        step_number_key="step_number",
+        general_exp_settings={
+            "slice_thickness_um": float,
+            "max_slice_num": int,
+            "pre_tilt_deg": float,
+            "sectioning_axis": SectioningAxis,
+            "stage_translational_tol_um": float,
+            "stage_angular_tol_deg": float,
+            "connection_host": str,
+            "connection_port": int,
+            "EBSD_OEM": ExternalDeviceOEM,
+            "EDS_OEM" "exp_dir": Path,
+            "h5_log_name": str,
+            "step_count": int,
+            "EDAX_settings": EDAXConfig,
+        },
+        step_count_key="step_count",
+        # step settings
+        step_section_key="steps",
+        step_general_key="step_general",
+        step_type_key="step_type",
+        step_frequency_key="frequency",
+        step_stage_settings_key="stage",
+        step_general_settings={
+            "step_number": int,
+            "step_type": StepType,
+            "frequency": int,
+            "stage": StagePositionUser,
+        },
+        image_step_settings={
+            "beam_type": BeamType,
+            "beam_settings": BeamSettings,
+            "detector": Detector,
+            "scan": Scan,
+            "bit_depth": ColorDepth,
+            "tiling_settings": ImageTileSettings,
+        },
+        # custom_step_settings={
+        #     "script_path": Path,
+        #     "executable_path": Path,
+        # }
+    )
+    V_1_2 = YMLFormat(
+        version=1.2,
+        # general settings
+        general_section_key="general",
+        non_step_section_count=2,
+        step_number_key="step_number",
+        general_exp_settings={
+            "slice_thickness_um": float,
+            "max_slice_num": int,
+            "pre_tilt_deg": float,
+            "sectioning_axis": SectioningAxis,
+            "stage_translational_tol_um": float,
+            "stage_angular_tol_deg": float,
+            "connection_host": str,
+            "connection_port": int,
+            "EBSD_OEM": ExternalDeviceOEM,
+            "EDS_OEM" "exp_dir": Path,
+            "h5_log_name": str,
+            "step_count": int,
+            "email_updates": EmailUpdateConfig,
+            "EDAX_settings": EDAXConfig,
+        },
+        step_count_key="step_count",
+        # step settings
+        step_section_key="steps",
+        step_general_key="step_general",
+        step_type_key="step_type",
+        step_frequency_key="frequency",
+        step_stage_settings_key="stage",
+        step_general_settings={
+            "step_number": int,
+            "step_type": StepType,
+            "frequency": int,
+            "stage": StagePositionUser,
+        },
+        image_step_settings={
+            "beam_type": BeamType,
+            "beam_settings": BeamSettings,
+            "detector": Detector,
+            "scan": Scan,
+            "bit_depth": ColorDepth,
+            "tiling_settings": ImageTileSettings,
+        },
+        # custom_step_settings={
+        #     "script_path": Path,
+        #     "executable_path": Path,
         # }
     )
