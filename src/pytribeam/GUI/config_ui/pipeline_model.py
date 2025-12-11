@@ -196,10 +196,14 @@ class PipelineConfig:
             index=0,
             step_type="general",
             name="general",
-            parameters={},
+            parameters={"step_count": "0"},  # Initialize step count
         )
 
         return cls(version=version, general=general, steps=[])
+
+    def _update_step_count(self):
+        """Update step_count parameter in general step to reflect current step count."""
+        self.general.set_param("step_count", str(len(self.steps)))
 
     def add_step(self, step_type: str, name: Optional[str] = None) -> StepConfig:
         """Add new step to pipeline.
@@ -225,10 +229,15 @@ class PipelineConfig:
             parameters={
                 "step_general/step_type": step_type,
                 "step_general/step_name": name,
+                "step_general/step_number": str(index),  # Set step number
             },
         )
 
         self.steps.append(step)
+
+        # Update step count in general
+        self._update_step_count()
+
         return step
 
     def remove_step(self, index: int) -> bool:
@@ -252,6 +261,9 @@ class PipelineConfig:
         for i, step in enumerate(self.steps, 1):
             step.index = i
             step.set_param("step_general/step_number", str(i))
+
+        # Update step count in general
+        self._update_step_count()
 
         return True
 
@@ -311,6 +323,10 @@ class PipelineConfig:
         new_step.set_param("step_general/step_number", str(new_step.index))
 
         self.steps.append(new_step)
+
+        # Update step count in general
+        self._update_step_count()
+
         return new_step
 
     def get_step(self, index: int) -> Optional[StepConfig]:
@@ -426,12 +442,18 @@ class PipelineConfig:
             # Sort by step number
             steps_list.sort(key=lambda s: s.index)
 
-        return cls(
+        # Create pipeline instance
+        pipeline = cls(
             version=float(yml_version),
             general=general,
             steps=steps_list,
             file_path=yaml_path,
         )
+
+        # Ensure step_count in general is accurate
+        pipeline._update_step_count()
+
+        return pipeline
 
     def to_yaml(self, yaml_path: Path):
         """Save pipeline configuration to YAML file.
