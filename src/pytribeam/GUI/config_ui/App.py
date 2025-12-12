@@ -137,6 +137,7 @@ class Configurator:
         self.pipeline_buttons = {}
 
         # Start the app
+        ### TODO: Step type error when coming into configurator from the main GUI via "edit config"
         if self.YAML_PATH is not None:
             self.load_config(self.YAML_PATH)
         else:
@@ -354,9 +355,6 @@ class Configurator:
 
     def save_exit(self):
         """Validate and save the current configuration and exit the application."""
-        # Sync CONFIG to pipeline model
-        self._sync_config_to_pipeline()
-
         # Validate first, exiting if invalid
         valid = self.validate_full()
         if not valid:

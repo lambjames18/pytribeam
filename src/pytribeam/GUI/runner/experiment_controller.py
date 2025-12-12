@@ -371,11 +371,11 @@ class ExperimentController:
         self.state.progress_percent = int((completed_steps / total_work) * 100)
         self._notify("state_changed", self.state)
         if self._send_emails:
-            if (
-                slice_num
-                % self.experiment_settings.general_settings.email_update_settings.update_frequency
-                == 0
-            ):
+            end_of_slice = step_num == total_steps
+            update_frequency = (
+                self.experiment_settings.general_settings.email_update_settings.update_frequency
+            )
+            if end_of_slice and (slice_num % update_frequency == 0):
                 message = (
                     f"Experiment update:\n"
                     f"Current slice: {slice_num}/{total_slices}\n"
@@ -460,16 +460,22 @@ class ExperimentController:
             return
         try:
             if error:
-                subject = "Experiment Error"
+                subject = "Experiment error"
                 attachments = None
             else:
-                subject = "Experiment Update"
+                subject = "Experiment update"
                 attachments = None
             ssh_host = (
                 self.experiment_settings.general_settings.email_update_settings.ssh_host
             )
             ssh_port = (
                 self.experiment_settings.general_settings.email_update_settings.ssh_port
+            )
+            ssh_user = (
+                self.experiment_settings.general_settings.email_update_settings.ssh_user
+            )
+            ssh_key_path = (
+                self.experiment_settings.general_settings.email_update_settings.ssh_key_path
             )
             sender_email = (
                 self.experiment_settings.general_settings.email_update_settings.sender
@@ -480,9 +486,6 @@ class ExperimentController:
             recipients = (
                 self.experiment_settings.general_settings.email_update_settings.recipients
             )
-            local_port = (
-                self.experiment_settings.general_settings.email_update_settings.local_port
-            )
             smtp_server = (
                 self.experiment_settings.general_settings.email_update_settings.smtp_server
             )
@@ -490,21 +493,24 @@ class ExperimentController:
                 self.experiment_settings.general_settings.email_update_settings.smtp_port
             )
 
-            send_update_email(
+            success, response = send_update_email(
                 ssh_host=ssh_host,
                 ssh_port=ssh_port,
+                ssh_user=ssh_user,
+                ssh_key_path=ssh_key_path,
                 sender_email=sender_email,
                 sender_password=sender_password,
                 recipients=recipients,
+                smtp_server=smtp_server,
+                smtp_port=smtp_port,
                 subject=subject,
                 body=message,
                 attachments=attachments,
-                cc=None,
-                bcc=None,
-                local_port=local_port,
-                smtp_server=smtp_server,
-                smtp_port=smtp_port,
             )
+            if success:
+                print(f"-----> {subject} email sent successfully")
+            else:
+                print(f"Warning: Failed to send {subject.lower()} email: {response}")
         except Exception as e:
             print(f"Warning: Failed to send email: {e}")
 

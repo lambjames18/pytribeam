@@ -846,6 +846,7 @@ def general(
                 sender=email_db["sender"],
                 sender_password=email_db["sender_password"],
                 recipients=email_db["recipients"].split(","),
+                update_frequency=email_db["update_frequency"],
             )
         yml_version = 1.2
 

@@ -259,25 +259,25 @@ class SSHTunnelEmailSender:
 
 def send_update_email(
     ssh_host: str,
+    ssh_port: int,
     ssh_user: str,
     ssh_key_path: str,
     sender_email: str,
+    sender_password: str,
     recipients: list,
+    smtp_server: str,
+    smtp_port: int,
     subject: str,
     body: str,
     cc: list = None,
     bcc: list = None,
     attachments: list = None,
-    sender_password: str = "xoqs adfo maet dari",
-    local_port: int = 1025,
-    smtp_server: str = "smtp.gmail.com",
-    smtp_port: int = 587,
 ):
     sender = SSHTunnelEmailSender(
         ssh_host=ssh_host,
         ssh_user=ssh_user,
         ssh_key_path=ssh_key_path,
-        local_port=local_port,
+        local_port=ssh_port,
         smtp_server=smtp_server,
         smtp_port=smtp_port,
     )
