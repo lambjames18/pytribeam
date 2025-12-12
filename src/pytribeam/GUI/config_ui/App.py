@@ -23,6 +23,7 @@ from pytribeam.GUI.config_ui.editor_controller import EditorController
 from pytribeam.GUI.config_ui.parameter_tracker import ParameterTracker
 
 # TODO: Test all functionality on an actual microscope
+# TODO: Odd behavior with validation working on full pipeline but saying general is invalid when validating a single step
 
 
 class Popup:
@@ -137,7 +138,6 @@ class Configurator:
         self.pipeline_buttons = {}
 
         # Start the app
-        ### TODO: Step type error when coming into configurator from the main GUI via "edit config"
         if self.YAML_PATH is not None:
             self.load_config(self.YAML_PATH)
         else:

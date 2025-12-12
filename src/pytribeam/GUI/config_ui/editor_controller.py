@@ -94,8 +94,8 @@ class EditorController:
             self.pipeline = PipelineConfig.from_yaml(yaml_path)
             self.current_step_index = 0
             self.set_version(self.pipeline.version)
-            self._notify("pipeline_loaded", self.pipeline)
             self._notify("step_selected", 0, self.pipeline.general)
+            self._notify("pipeline_loaded", self.pipeline)
             return True, None
         except Exception as e:
             return False, str(e)
