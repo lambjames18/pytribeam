@@ -481,7 +481,7 @@ class PipelineConfig:
             index=0,
             step_type="general",
             name="general",
-            parameters={k: str(v) for k, v in general_flat.items()},
+            parameters={k: _value_to_string(v) for k, v in general_flat.items()},
             version=float(yml_version),
         )
 
@@ -504,7 +504,7 @@ class PipelineConfig:
                     index=step_number,
                     step_type=step_type,
                     name=step_name,
-                    parameters={k: str(v) for k, v in flat_step.items()},
+                    parameters={k: _value_to_string(v) for k, v in flat_step.items()},
                     version=float(yml_version),
                 )
                 steps_list.append(step)
@@ -673,6 +673,20 @@ class PipelineConfig:
 
     def __repr__(self) -> str:
         return f"PipelineConfig(version={self.version}, steps={len(self.steps)})"
+
+
+def _value_to_string(value: Any) -> str:
+    """Convert value to string, handling None/null as empty string.
+
+    Args:
+        value: Value to convert
+
+    Returns:
+        String representation (empty string for None)
+    """
+    if value is None or value == "null":
+        return ""
+    return str(value)
 
 
 def flatten_dict(d: Dict, parent_key: str = "", sep: str = "/") -> Dict:
