@@ -11,7 +11,7 @@ from PIL import Image, ImageTk
 
 import pytribeam.GUI.CustomTkinterWidgets as ctk
 from pytribeam.GUI.common import AppResources
-from pytribeam.GUI.runner.experiment_controller import ExperimentState
+from pytribeam.GUI.runner_util.experiment_controller import ExperimentState
 
 
 class ControlPanel(tk.Frame):
@@ -35,13 +35,7 @@ class ControlPanel(tk.Frame):
         on_stop_now: Callback for immediate stop
     """
 
-    def __init__(
-        self,
-        parent,
-        theme,
-        resources: AppResources,
-        **kwargs
-    ):
+    def __init__(self, parent, theme, resources: AppResources, **kwargs):
         """Initialize control panel.
 
         Args:
@@ -152,7 +146,9 @@ class ControlPanel(tk.Frame):
             fg=self.theme.fg,
             anchor="w",
         )
-        self.config_file_label.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=2, padx=2)
+        self.config_file_label.grid(
+            row=3, column=0, columnspan=2, sticky="nsew", pady=2, padx=2
+        )
 
         self.exp_dir_label = tk.Label(
             info_frame,
@@ -162,7 +158,9 @@ class ControlPanel(tk.Frame):
             fg=self.theme.fg,
             anchor="w",
         )
-        self.exp_dir_label.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=2, padx=2)
+        self.exp_dir_label.grid(
+            row=4, column=0, columnspan=2, sticky="nsew", pady=2, padx=2
+        )
 
         self.valid_status_label = tk.Label(
             info_frame,
@@ -172,7 +170,9 @@ class ControlPanel(tk.Frame):
             fg=self.theme.fg,
             anchor="w",
         )
-        self.valid_status_label.grid(row=5, column=0, columnspan=2, sticky="nsew", pady=2, padx=2)
+        self.valid_status_label.grid(
+            row=5, column=0, columnspan=2, sticky="nsew", pady=2, padx=2
+        )
 
         # Buttons
         create_btn = tk.Button(
@@ -212,7 +212,9 @@ class ControlPanel(tk.Frame):
             info_frame,
             text="Validate",
             font=ctk.FONT,
-            command=lambda: self.on_validate_config() if self.on_validate_config else None,
+            command=lambda: (
+                self.on_validate_config() if self.on_validate_config else None
+            ),
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
@@ -246,7 +248,9 @@ class ControlPanel(tk.Frame):
             state="disabled",
         )
         self.starting_slice_spinbox.grid(row=2, column=1, sticky="nsew", pady=5, padx=5)
-        ctk.tooltip(self.starting_slice_spinbox, "Slice number to start the experiment at")
+        ctk.tooltip(
+            self.starting_slice_spinbox, "Slice number to start the experiment at"
+        )
 
         # Starting step
         step_label = tk.Label(
@@ -280,11 +284,15 @@ class ControlPanel(tk.Frame):
             self,
             text="Start experiment",
             font=ctk.FONT,
-            command=lambda: self.on_start_experiment() if self.on_start_experiment else None,
+            command=lambda: (
+                self.on_start_experiment() if self.on_start_experiment else None
+            ),
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
-        self.start_btn.grid(row=3, column=0, columnspan=4, sticky="nsew", pady=3, padx=5)
+        self.start_btn.grid(
+            row=3, column=0, columnspan=4, sticky="nsew", pady=3, padx=5
+        )
         ctk.tooltip(
             self.start_btn,
             "Start the experiment with the current configuration",
@@ -298,7 +306,9 @@ class ControlPanel(tk.Frame):
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
-        self.stop_step_btn.grid(row=4, column=0, columnspan=4, sticky="nsew", pady=3, padx=5)
+        self.stop_step_btn.grid(
+            row=4, column=0, columnspan=4, sticky="nsew", pady=3, padx=5
+        )
         ctk.tooltip(self.stop_step_btn, "Stop after current step (Ctrl+Shift+X)")
 
         self.stop_slice_btn = tk.Button(
@@ -309,7 +319,9 @@ class ControlPanel(tk.Frame):
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
-        self.stop_slice_btn.grid(row=5, column=0, columnspan=4, sticky="nsew", pady=3, padx=5)
+        self.stop_slice_btn.grid(
+            row=5, column=0, columnspan=4, sticky="nsew", pady=3, padx=5
+        )
         ctk.tooltip(self.stop_slice_btn, "Stop after current slice (Ctrl+X)")
 
         # Separator
@@ -324,7 +336,9 @@ class ControlPanel(tk.Frame):
             bg=self.theme.bg_off,
             fg=self.theme.fg,
         )
-        self.stop_now_btn.grid(row=7, column=0, columnspan=4, sticky="nsew", pady=3, padx=5)
+        self.stop_now_btn.grid(
+            row=7, column=0, columnspan=4, sticky="nsew", pady=3, padx=5
+        )
         ctk.tooltip(self.stop_now_btn, "Stop immediately (Ctrl+C)")
 
     def update_experiment_info(self, config_info: dict):
@@ -346,22 +360,18 @@ class ControlPanel(tk.Frame):
         self.config_file_label.config(
             text=f"Config: {config_info.get('config_path', 'No file loaded')}"
         )
-        self.exp_dir_label.config(
-            text=f"Exp dir: {config_info.get('exp_dir', '-')}"
-        )
+        self.exp_dir_label.config(text=f"Exp dir: {config_info.get('exp_dir', '-')}")
 
         # Update starting position controls
-        if 'total_slices' in config_info and config_info['total_slices'] != '-':
+        if "total_slices" in config_info and config_info["total_slices"] != "-":
             self.starting_slice_spinbox.config(
-                from_=1,
-                to=config_info['total_slices'],
-                state="normal"
+                from_=1, to=config_info["total_slices"], state="normal"
             )
 
-        if 'step_names' in config_info and config_info['step_names']:
-            self.starting_step_menu.set_options(config_info['step_names'])
+        if "step_names" in config_info and config_info["step_names"]:
+            self.starting_step_menu.set_options(config_info["step_names"])
             self.starting_step_menu.config(state="normal")
-            self.starting_step_var.set(config_info['step_names'][0])
+            self.starting_step_var.set(config_info["step_names"][0])
 
     def set_validation_status(self, is_valid: bool, message: str = ""):
         """Update validation status display.
@@ -372,13 +382,11 @@ class ControlPanel(tk.Frame):
         """
         if is_valid:
             self.valid_status_label.config(
-                text=message or "Configuration file is valid",
-                fg=self.theme.green
+                text=message or "Configuration file is valid", fg=self.theme.green
             )
         else:
             self.valid_status_label.config(
-                text=message or "Configuration file is invalid",
-                fg=self.theme.red
+                text=message or "Configuration file is invalid", fg=self.theme.red
             )
 
     def set_buttons_enabled(self, start: bool = True, stop_controls: bool = False):

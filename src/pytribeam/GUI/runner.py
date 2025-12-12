@@ -26,8 +26,8 @@ from pytribeam.GUI.common import (
     TextRedirector,
 )
 from pytribeam.GUI.common.threading_utils import generate_escape_keypress
-from pytribeam.GUI.runner import ExperimentController, ExperimentState
-from pytribeam.GUI.runner.ui_components import ControlPanel, StatusPanel
+from pytribeam.GUI.runner_util import ExperimentController, ExperimentState
+from pytribeam.GUI.runner_util.ui_components import ControlPanel, StatusPanel
 
 
 class MainApplication(tk.Tk):
@@ -288,7 +288,9 @@ class MainApplication(tk.Tk):
             print("No file selected.")
             return
         print(f"Imported configuration file from: {self.config_path}")
-        self.control_panel.set_validation_status(False, "Configuration file is unvalidated")
+        self.control_panel.set_validation_status(
+            False, "Configuration file is unvalidated"
+        )
         self._update_experiment_info()
 
     def edit_config(self, new=False):
@@ -300,7 +302,9 @@ class MainApplication(tk.Tk):
         if app.clean_exit:
             self.config_path = Path(app.YAML_PATH)
             print(f"Imported configuration file from: {self.config_path}")
-            self.control_panel.set_validation_status(True, "Configuration file is valid")
+            self.control_panel.set_validation_status(
+                True, "Configuration file is valid"
+            )
             self._update_experiment_info()
 
     def validate_config(self, return_settings=False):
@@ -325,7 +329,9 @@ class MainApplication(tk.Tk):
                 if out_dict["error"]:
                     raise Exception(out_dict["error"])
             experiment_settings = out_dict["result"]
-            self.control_panel.set_validation_status(True, "Configuration file is valid")
+            self.control_panel.set_validation_status(
+                True, "Configuration file is valid"
+            )
             if return_settings:
                 return experiment_settings
             else:
@@ -334,7 +340,9 @@ class MainApplication(tk.Tk):
             messagebox.showerror(
                 "Invalid config file", f"The provided config file is invalid:\n{e}"
             )
-            self.control_panel.set_validation_status(False, "Configuration file is invalid")
+            self.control_panel.set_validation_status(
+                False, "Configuration file is invalid"
+            )
             return
 
     # -------- Update GUI functions -------- #
@@ -360,12 +368,12 @@ class MainApplication(tk.Tk):
             return
         # Prepare config info dictionary for control panel
         config_info = {
-            'total_slices': max_slice_num,
-            'total_steps': num_steps,
-            'slice_thickness': f"{slice_thickness} µm",
-            'config_path': str(self.config_path),
-            'exp_dir': str(exp_dir),
-            'step_names': step_names,
+            "total_slices": max_slice_num,
+            "total_steps": num_steps,
+            "slice_thickness": f"{slice_thickness} µm",
+            "config_path": str(self.config_path),
+            "exp_dir": str(exp_dir),
+            "step_names": step_names,
         }
         self.control_panel.update_experiment_info(config_info)
 
@@ -575,7 +583,9 @@ class MainApplication(tk.Tk):
 
         # Setup the progress bar
         start_point = (starting_slice - 1) * num_steps + starting_step_number
-        self.status_panel.progress.set(int((start_point - 1) / (ending_slice * num_steps) * 100))
+        self.status_panel.progress.set(
+            int((start_point - 1) / (ending_slice * num_steps) * 100)
+        )
         self.status_panel.current_step_var.set(step_names[starting_step_number])
         self.status_panel.current_slice_var.set(starting_slice)
 
