@@ -550,6 +550,12 @@ class ExperimentController:
         # If there's a running thread, interrupt it
         if self._thread and self._thread.is_alive():
             try:
-                self._thread.raise_exception(KeyboardInterrupt)
+                count = 0
+                while self._thread.is_alive():
+                    self._thread.raise_exception(KeyboardInterrupt)
+                    time.sleep(0.1)
+                    count += 1
+                    if count >= 10:
+                        break
             except Exception as e:
                 print(f"Warning: Failed to interrupt thread: {e}")
