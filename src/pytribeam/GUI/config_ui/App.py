@@ -734,17 +734,24 @@ class Configurator:
                 laser_state[key] = ""
 
         # Update pulse parameters
-        keys = ["wavelength_nm", "pulse_divider", "pulse_energy_uj"]
-        for key in keys:
-            self.controller.update_parameter(f"pulse/{key}", laser_state[key])
+        self.controller.update_parameter(
+            "pulse/wavelength_nm", laser_state["wavelength_nm"]
+        )
+        self.controller.update_parameter("pulse/divider", laser_state["pulse_divider"])
+        self.controller.update_parameter(
+            "pulse/energy_uj", laser_state["pulse_energy_uj"]
+        )
 
         # Update pattern geometry based on type
         if laser_state["geometry_type"] == "line":
-            keys = ["passes", "size_um", "pitch_um", "laser_scan_type"]
+            keys = ["passes", "size_um", "pitch_um"]
             for key in keys:
                 self.controller.update_parameter(
                     f"pattern/type/line/{key}", laser_state[key]
                 )
+            self.controller.update_parameter(
+                "pattern/type/line/scan_type", laser_state["laser_scan_type"]
+            )
         elif laser_state["geometry_type"] == "box":
             keys = [
                 "passes",
@@ -752,12 +759,14 @@ class Configurator:
                 "size_y_um",
                 "pitch_x_um",
                 "pitch_y_um",
-                "laser_scan_type",
             ]
             for key in keys:
                 self.controller.update_parameter(
                     f"pattern/type/box/{key}", laser_state[key]
                 )
+            self.controller.update_parameter(
+                "pattern/type/box/scan_type", laser_state["laser_scan_type"]
+            )
             self.controller.update_parameter(
                 "pattern/type/box/coordinate_ref",
                 laser_state["coordinate_ref"].value,
