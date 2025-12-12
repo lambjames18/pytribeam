@@ -299,7 +299,9 @@ class EditorController:
             return False, "No pipeline loaded"
 
         # Get general settings for validation context, making sure they are valid
-        result = self.validator.validate_general(self.pipeline.general.get_all_params())
+        result = self.validator.validate_general(
+            self.pipeline.general.get_all_params(flat=False)
+        )
         if not result.success:
             return False, "General configuration is invalid"
         general = result.settings
