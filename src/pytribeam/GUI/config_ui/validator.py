@@ -62,6 +62,14 @@ class ConfigValidator:
         """Initialize validator."""
         self._yml_format = ut.yml_format(version=1.0)
 
+    def set_version(self, version: float):
+        """Set configuration version for validation.
+
+        Args:
+            version: Configuration version number
+        """
+        self._yml_format = ut.yml_format(version=version)
+
     def validate_general(self, config_dict: Dict) -> ValidationResult:
         """Validate general configuration section.
 

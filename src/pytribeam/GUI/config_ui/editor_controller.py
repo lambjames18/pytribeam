@@ -34,9 +34,12 @@ class EditorController:
         """
         self.pipeline: Optional[PipelineConfig] = None
         self.current_step_index: int = 0
-        self.validator = ConfigValidator()
         self._callbacks: Dict[str, Callable] = {}
         self._version = version or float(lut.VERSIONS[-1])
+
+        # Initialize validator
+        self.validator = ConfigValidator()
+        self.validator.set_version(self._version)
 
         # Track expanded frames for UI state
         self.expanded_frames: Dict[str, bool] = {}
@@ -90,7 +93,7 @@ class EditorController:
         try:
             self.pipeline = PipelineConfig.from_yaml(yaml_path)
             self.current_step_index = 0
-            self._version = self.pipeline.version
+            self.set_version(self.pipeline.version)
             self._notify("pipeline_loaded", self.pipeline)
             self._notify("step_selected", 0, self.pipeline.general)
             return True, None
@@ -321,7 +324,9 @@ class EditorController:
         Returns:
             Tuple of (is_valid, message)
         """
-        result = self.validator.validate_general(self.pipeline.general.get_all_params())
+        result = self.validator.validate_general(
+            self.pipeline.general.get_all_params(flat=False)
+        )
         success = result.success
         message = (
             "General configuration is valid."
@@ -374,14 +379,18 @@ class EditorController:
         return False
 
     def set_version(self, version: float):
-        """Set configuration file version.
+        """Set configuration file version and migrate parameters.
+
+        This updates the pipeline version and migrates all step parameters
+        to match the new version's schema (adds new params, removes old ones).
 
         Args:
             version: New version number
         """
         self._version = version
+        self.validator.set_version(self._version)
         if self.pipeline:
-            self.pipeline.version = version
+            self.pipeline.set_version(version)
             self._notify("version_changed", version)
 
     def get_version(self) -> float:

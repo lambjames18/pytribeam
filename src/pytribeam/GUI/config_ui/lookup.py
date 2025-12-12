@@ -290,6 +290,15 @@ email_recipients = LUTField(
     str,
     tbt.Limit(min=1.2, max=max(VERSIONS)),
 )
+email_update_frequency = LUTField(
+    "Update Frequency (slices)",
+    50,
+    ctk.Entry,
+    {"dtype": int},
+    "The frequency (in number of slices) at which to send email updates.",
+    int,
+    tbt.Limit(min=1.2, max=max(VERSIONS)),
+)
 email_lut = LUT("email")
 email_lut.add_entry("ssh_host", email_ssh_host)
 email_lut.add_entry("ssh_port", email_ssh_port)
@@ -300,6 +309,7 @@ email_lut.add_entry("smtp_port", email_smtp_port)
 email_lut.add_entry("sender", email_sender)
 email_lut.add_entry("sender_password", email_password)
 email_lut.add_entry("recipients", email_recipients)
+email_lut.add_entry("update_frequency", email_update_frequency)
 
 ### General LUT ###
 slice_thickness_um = LUTField(

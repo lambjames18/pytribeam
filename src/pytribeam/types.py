@@ -1653,6 +1653,7 @@ class EmailUpdateConfig(NamedTuple):
     sender: str
     sender_password: str
     recipients: List[str]
+    update_frequency: int  # in slices
 
 
 ### DERIVED CLASSES ###

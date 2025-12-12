@@ -595,6 +595,82 @@ class PipelineConfig:
             "steps": steps_dict,
         }
 
+    def set_version(self, new_version: float):
+        """Update pipeline version and migrate all parameters to new version.
+
+        This method:
+        1. Updates version for pipeline and all steps
+        2. Adds new parameters introduced in new version (with defaults)
+        3. Removes parameters that don't exist in new version
+        4. Preserves existing parameter values where applicable
+
+        Args:
+            new_version: Target version to migrate to
+        """
+        if new_version == self.version:
+            return  # No change needed
+
+        # Update general step
+        self._migrate_step_to_version(self.general, new_version)
+
+        # Update all pipeline steps
+        for step in self.steps:
+            self._migrate_step_to_version(step, new_version)
+
+        # Update pipeline version
+        self.version = new_version
+
+    def _migrate_step_to_version(self, step: StepConfig, new_version: float):
+        """Migrate a single step to a new version.
+
+        Args:
+            step: Step to migrate
+            new_version: Target version
+        """
+        old_version = step.version
+        step_type = step.step_type
+
+        # Get LUTs for old and new versions
+        try:
+            old_lut = lut.get_lut(step_type.lower(), old_version)
+            old_lut.flatten()
+        except Exception:
+            # If old LUT doesn't exist, use empty dict
+            old_lut = lut.LUT()
+            old_lut.flatten()
+
+        try:
+            new_lut = lut.get_lut(step_type.lower(), new_version)
+            new_lut.flatten()
+        except Exception:
+            # If new LUT doesn't exist, can't migrate
+            print(f"Warning: Cannot get LUT for {step_type} version {new_version}")
+            step.version = new_version
+            return
+
+        # Get current parameters
+        current_params = deepcopy(step.parameters)
+
+        # Build new parameter set
+        new_params = {}
+
+        # Process all parameters in new LUT
+        for param_key, field in new_lut.items():
+            if param_key in current_params:
+                # Parameter exists in both - keep current value
+                new_params[param_key] = current_params[param_key]
+            else:
+                # New parameter - use default from LUT
+                default_value = field.default if field.default is not None else ""
+                new_params[param_key] = str(default_value)
+
+        # Note: Parameters that exist in old but not new are automatically dropped
+        # by not adding them to new_params
+
+        # Update step with migrated parameters
+        step.parameters = new_params
+        step.version = new_version
+
     def __repr__(self) -> str:
         return f"PipelineConfig(version={self.version}, steps={len(self.steps)})"
 

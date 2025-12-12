@@ -2385,6 +2385,11 @@ def validate_email_settings(
                 str,
                 error=f"Requested 'recipient' of '{email_settings['recipients']}', which must be a string.",
             ),
+            "update_frequency": And(
+                int,
+                lambda x: x > 0,
+                error=f"Requested 'update_frequency' of '{email_settings['update_frequency']}', which must be a positive int (greater than 0).",
+            ),
         },
         ignore_extra_keys=True,
     )
