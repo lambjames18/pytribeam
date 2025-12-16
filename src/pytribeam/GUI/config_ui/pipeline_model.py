@@ -26,6 +26,10 @@ def _check_value_type(value: Any, dtype: type) -> Any:
     Returns:
         Converted value with correct type
     """
+    # If value is already the correct type, return as-is (especially for booleans)
+    if dtype is not None and isinstance(value, dtype):
+        return value
+
     if isinstance(value, str):
         value = value.strip()
 
@@ -37,7 +41,7 @@ def _check_value_type(value: Any, dtype: type) -> Any:
     if dtype is None:
         return value
 
-    # Handle booleans
+    # Handle boolean strings
     if value in ["True", "true"]:
         return True
     elif value in ["False", "false"]:
@@ -234,14 +238,14 @@ class PipelineConfig:
         """Update step_count parameter in general step to reflect current step count."""
         self.general.set_param("step_count", str(len(self.steps)))
 
-    def _populate_default_parameters(self, step_type: str) -> Dict[str, str]:
+    def _populate_default_parameters(self, step_type: str) -> Dict[str, Any]:
         """Populate parameters with default values from LUT.
 
         Args:
             step_type: Type of step (e.g., 'general', 'image', 'fib')
 
         Returns:
-            Dictionary of parameter paths to default string values
+            Dictionary of parameter paths to default values (preserves booleans)
         """
         try:
             # Get LUT for this step type and version
@@ -252,9 +256,13 @@ class PipelineConfig:
             # Extract all parameters with their defaults
             params = {}
             for key, field in step_lut_flat.items():
-                # Convert default value to string for consistency
+                # Get default value, preserving type (especially booleans)
                 default_value = field.default if field.default is not None else ""
-                params[key] = str(default_value)
+                # Preserve boolean type, convert others to string
+                if isinstance(default_value, bool):
+                    params[key] = default_value
+                else:
+                    params[key] = str(default_value)
 
             return params
         except Exception as e:
@@ -678,14 +686,22 @@ class PipelineConfig:
 def _value_to_string(value: Any) -> str:
     """Convert value to string, handling None/null as empty string.
 
+    Special handling:
+    - None/null → empty string
+    - Booleans → keep as boolean (not converted to string)
+    - Everything else → string
+
     Args:
         value: Value to convert
 
     Returns:
-        String representation (empty string for None)
+        String representation (empty string for None, bool for booleans)
     """
     if value is None or value == "null":
         return ""
+    # Preserve boolean type for checkbuttons
+    if isinstance(value, bool):
+        return value
     return str(value)
 
 
