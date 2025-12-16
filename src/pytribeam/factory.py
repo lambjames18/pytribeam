@@ -2267,30 +2267,30 @@ def validate_EBSD_EDS_settings(
         raise SystemError(
             "EBSD and/or EDS control requested, but Laser API not accessible, so cannot use EBSD and EDS control. Please restart Laser API, or if not installed, change OEM to 'null', or leave blank in settings file."
         )
-    microscope = tbt.Microscope()
-    ut.connect_microscope(
-        microscope=microscope,
-        quiet_output=True,
-        connection_host=connection_host,
-        connection_port=connection_port,
-    )
-    if tbt.ExternalDeviceOEM(eds_oem) != tbt.ExternalDeviceOEM.NONE:
-        devices.retract_EDS(microscope=microscope)
-    if tbt.ExternalDeviceOEM(ebsd_oem) != tbt.ExternalDeviceOEM.NONE:
-        devices.retract_EBSD(microscope=microscope)
-    ut.disconnect_microscope(
-        microscope=microscope,
-        quiet_output=True,
-    )
+
+    ###################### PROPOSED CHANGE ######################
+    # Retracting devices here is unnecessary
+    # This causes devices to retract during validation
+    # Device retraction is needed only when startin/ending experiments
+    # Both of which are outside the scope of validation and already handled elsewhere
+    ###################### PROPOSED CHANGE ######################
+    # microscope = tbt.Microscope()
+    # ut.connect_microscope(
+    #     microscope=microscope,
+    #     quiet_output=True,
+    #     connection_host=connection_host,
+    #     connection_port=connection_port,
+    # )
+    # if tbt.ExternalDeviceOEM(eds_oem) != tbt.ExternalDeviceOEM.NONE:
+    #     devices.retract_EDS(microscope=microscope)
+    # if tbt.ExternalDeviceOEM(ebsd_oem) != tbt.ExternalDeviceOEM.NONE:
+    #     devices.retract_EBSD(microscope=microscope)
+    # ut.disconnect_microscope(
+    #     microscope=microscope,
+    #     quiet_output=True,
+    # )
 
     if edax_settings is not None:
-        # if yml_format.version >= 1.1:
-        #     edax_save_directory = edax_settings.get("save_directory")
-        #     edax_project_name = edax_settings.get("project_name")
-        #     edax_connection = edax_settings.get("connection")
-        #     edax_host = edax_connection.get("host")
-        #     edax_port = edax_connection.get("port")
-
         schema = Schema(
             {
                 "save_directory": And(
