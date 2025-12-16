@@ -130,6 +130,8 @@ class StepConfig:
             value: Value to set
         """
         self.parameters[path] = value
+        if path == "step_general/step_name":
+            self.name = str(value)
 
     def has_param(self, path: str) -> bool:
         """Check if parameter exists.
