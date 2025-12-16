@@ -1506,7 +1506,8 @@ def ebsd(
     if yml_format.version >= 1.1:
         edax_settings = step_settings.get("edax_settings")
         scan_db = edax_settings.get("scan_box")
-        grid_type = tbt.EBSDGridType(edax_settings.get("grid_type"))
+        # We use brackets instead of parentheses here since grid type is the name not the value
+        grid_type = tbt.EBSDGridType[edax_settings.get("grid_type")]
         save_patterns = edax_settings.get("save_patterns")
         x_start_um = scan_db.get("x_start_um")
         y_start_um = scan_db.get("y_start_um")
