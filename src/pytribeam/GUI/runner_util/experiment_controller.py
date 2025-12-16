@@ -246,12 +246,14 @@ class ExperimentController:
 
                 # Track slice start time
                 slice_start = time.time()
+                count_slice_for_time = True
                 self.state.current_slice = i
                 self._notify("state_changed", self.state)
 
                 for j in range(num_steps):
                     # Skip steps if starting mid-slice
                     if i == starting_slice and j < starting_step_idx:
+                        count_slice_for_time = False
                         continue
 
                     if self.state.should_stop_now:
@@ -284,7 +286,8 @@ class ExperimentController:
 
                 # Update timing stats
                 slice_end = time.time()
-                self._slice_times.append(slice_end - slice_start)
+                if count_slice_for_time:
+                    self._slice_times.append(slice_end - slice_start)
                 self._update_timing_stats(i, ending_slice)
 
         except KeyboardInterrupt:
@@ -379,7 +382,6 @@ class ExperimentController:
                 message = (
                     f"Experiment update:\n"
                     f"Current slice: {slice_num}/{total_slices}\n"
-                    f"Current step: {step_num}/{total_steps}\n"
                     f"Progress: {self.state.progress_percent}%\n"
                     f"Estimated remaining time: {self.state.remaining_time_str}\n"
                 )
