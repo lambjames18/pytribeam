@@ -26,16 +26,16 @@ def _check_value_type(value: Any, dtype: type) -> Any:
     Returns:
         Converted value with correct type
     """
+    # Handle None values
+    if value in ["", "null", "None", None]:
+        return None
+
     # If value is already the correct type, return as-is (especially for booleans)
     if dtype is not None and isinstance(value, dtype):
         return value
 
     if isinstance(value, str):
         value = value.strip()
-
-    # Handle None values
-    if value in ["", "null", "None", None]:
-        return None
 
     # If no dtype specified, return as-is
     if dtype is None:
@@ -567,6 +567,7 @@ class PipelineConfig:
         general_params = {
             k: v for k, v in general_params.items() if k in general_lut.keys()
         }
+        general_params = _apply_type_conversion(general_params, "general", self.version)
 
         general_dict = unflatten_dict(general_params, sep="/")
 

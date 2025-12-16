@@ -354,12 +354,7 @@ class Configurator:
 
     def save_exit(self):
         """Validate and save the current configuration and exit the application."""
-        # Validate first, exiting if invalid
-        valid = self.validate_full()
-        if not valid:
-            return
-
-        # Get save path
+        # Save first
         if self.YAML_PATH is None:
             yml_path = tk.filedialog.asksaveasfilename(
                 parent=self.toplevel,
@@ -379,15 +374,22 @@ class Configurator:
         # Save the configuration
         success, error = self.controller.save_pipeline(Path(yml_path))
         if success:
-            self.clean_exit = True
             self.YAML_PATH = yml_path
-            self.toplevel.destroy()
         else:
             messagebox.showerror(
                 parent=self.toplevel,
                 title="Error saving configuration",
                 message=f"{error}",
             )
+            return False
+
+        # Validate first, exiting if invalid
+        valid = self.validate_full()
+        if not valid:
+            return False
+        # Exit
+        self.clean_exit = True
+        self.toplevel.destroy()
 
     def quit(self):
         if self.clean_exit:
@@ -453,7 +455,6 @@ class Configurator:
 
         # If step name changed, update pipeline display
         if "step_name" in path:
-            print("Step name changed, updating pipeline names")
             self._update_pipeline_names()
 
     def _on_step_validation_complete(self, index, success, message):
@@ -957,7 +958,6 @@ class Configurator:
                 for i, s in enumerate(self.controller.pipeline.steps)
             ]
         )
-        print(labels)
 
         for i, label in enumerate(labels):
             row_i = i + 2
@@ -1192,6 +1192,9 @@ class Configurator:
             var=var,
             **kwargs,
         )
+        # Ensure checkbuttons are selected if the current value is True
+        if type(value.default) == bool and var.get():
+            widget.select()
         # label.pack(side="left", padx=(0, 10))
         # widget.pack(side="left")
         label.grid(row=row, column=0, sticky="nsew", pady=2)

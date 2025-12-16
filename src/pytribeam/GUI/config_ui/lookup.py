@@ -666,18 +666,18 @@ working_dist_mm = LUTField(
 )
 dynamic_focus = LUTField(
     "Use Dynamic Focus",
-    "False",
+    False,
     ctk.Checkbutton,
-    {"offvalue": "False", "onvalue": "True", "bd": 0, "dtype": bool},
+    {"offvalue": False, "onvalue": True, "bd": 0, "dtype": bool},
     "Whether to use dynamic focusing.",
     bool,
     tbt.Limit(min=1.0, max=max(VERSIONS)),
 )
 tilt_correction = LUTField(
     "Use Tilt Correction",
-    "False",
+    False,
     ctk.Checkbutton,
-    {"offvalue": "False", "onvalue": "True", "bd": 0, "dtype": bool},
+    {"offvalue": False, "onvalue": True, "bd": 0, "dtype": bool},
     "Whether to use tilt correction.",
     bool,
     tbt.Limit(min=1.0, max=max(VERSIONS)),
@@ -1015,9 +1015,9 @@ eds_lut.add_entry("bit_depth", deepcopy(image_bit_depth))
 ### EBSD ###
 ebsd_concurrent_eds = LUTField(
     "Concurrent EDS",
-    "False",
+    False,
     ctk.Checkbutton,
-    {"offvalue": "False", "onvalue": "True", "bd": 0, "dtype": bool},
+    {"offvalue": False, "onvalue": True, "bd": 0, "dtype": bool},
     "Whether to acquire EDS data concurrently with the EBSD data.",
     bool,
     tbt.Limit(min=1.0, max=max(VERSIONS)),
@@ -1078,9 +1078,9 @@ edax_grid_type = LUTField(
 )
 edax_save_patterns = LUTField(
     "Save Patterns",
-    "False",
+    False,
     ctk.Checkbutton,
-    {"offvalue": "False", "onvalue": "True", "bd": 0, "dtype": bool},
+    {"offvalue": False, "onvalue": True, "bd": 0, "dtype": bool},
     "Whether to save the patterns.",
     bool,
     tbt.Limit(min=1.1, max=max(VERSIONS)),
@@ -1397,11 +1397,11 @@ fib_lut["image"]["beam"]["type"] = LUTField(
 )
 fib_lut["image"]["beam"]["dynamic_focus"] = LUTField(
     "Use Dynamic Focus",
-    "False",
+    False,
     ctk.Checkbutton,
     {
-        "offvalue": "False",
-        "onvalue": "True",
+        "offvalue": False,
+        "onvalue": True,
         "bd": 0,
         "dtype": bool,
         "state": "disabled",
@@ -1412,11 +1412,11 @@ fib_lut["image"]["beam"]["dynamic_focus"] = LUTField(
 )
 fib_lut["image"]["beam"]["tilt_correction"] = LUTField(
     "Use Tilt Correction",
-    "False",
+    False,
     ctk.Checkbutton,
     {
-        "offvalue": "False",
-        "onvalue": "True",
+        "offvalue": False,
+        "onvalue": True,
         "bd": 0,
         "dtype": bool,
         "state": "disabled",
@@ -1436,11 +1436,11 @@ fib_lut["mill"]["beam"]["type"] = LUTField(
 )
 fib_lut["mill"]["beam"]["dynamic_focus"] = LUTField(
     "Use Dynamic Focus",
-    "False",
+    False,
     ctk.Checkbutton,
     {
-        "offvalue": "False",
-        "onvalue": "True",
+        "offvalue": False,
+        "onvalue": True,
         "bd": 0,
         "dtype": bool,
         "state": "disabled",
@@ -1451,11 +1451,11 @@ fib_lut["mill"]["beam"]["dynamic_focus"] = LUTField(
 )
 fib_lut["mill"]["beam"]["tilt_correction"] = LUTField(
     "Use Tilt Correction",
-    "False",
+    False,
     ctk.Checkbutton,
     {
-        "offvalue": "False",
-        "onvalue": "True",
+        "offvalue": False,
+        "onvalue": True,
         "bd": 0,
         "dtype": bool,
         "state": "disabled",
