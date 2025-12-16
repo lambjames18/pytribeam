@@ -1504,16 +1504,21 @@ def ebsd(
         grid_type = None
         save_patterns = None
     if yml_format.version >= 1.1:
-        scan_db = step_settings["edax_settings"]["scan_box"]
-        # TODO fix this referenmce to the yml
-        grid_type = tbt.EBSDGridType.SQUARE
-        save_patterns = step_settings["edax_settings"]["save_patterns"]
+        edax_settings = step_settings.get("edax_settings")
+        scan_db = edax_settings.get("scan_box")
+        grid_type = tbt.EBSDGridType(edax_settings.get("grid_type"))
+        save_patterns = edax_settings.get("save_patterns")
+        x_start_um = scan_db.get("x_start_um")
+        y_start_um = scan_db.get("y_start_um")
+        x_size_um = scan_db.get("x_size_um")
+        y_size_um = scan_db.get("y_size_um")
+        step_size_um = scan_db.get("step_size_um")
         scan_box = tbt.EBSDScanBox(
-            x_start_um=scan_db["x_start_um"],
-            y_start_um=scan_db["y_start_um"],
-            x_size_um=scan_db["x_size_um"],
-            y_size_um=scan_db["y_size_um"],
-            step_size_um=scan_db["step_size_um"],
+            x_start_um=x_start_um,
+            y_start_um=y_start_um,
+            x_size_um=x_size_um,
+            y_size_um=y_size_um,
+            step_size_um=step_size_um,
         )
     ebsd_settings = tbt.EBSDSettings(
         image=image_settings,
