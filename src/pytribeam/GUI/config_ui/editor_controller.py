@@ -236,7 +236,9 @@ class EditorController:
         """
         step = self.get_current_step()
         if step:
-            step.set_param(path, str(value))
+            # Preserve boolean type, convert others to string
+            param_value = value if isinstance(value, bool) else str(value)
+            step.set_param(path, param_value)
             self._notify("parameter_changed", path, value)
 
     def get_parameter(self, path: str, default: Any = None) -> Any:
