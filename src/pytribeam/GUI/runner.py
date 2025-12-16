@@ -491,7 +491,8 @@ class MainApplication(tk.Tk):
 
     def _on_experiment_started(self, settings, start_slice, start_step):
         """Handle experiment start."""
-        print(f"Starting experiment at slice {start_slice}, step {start_step}")
+        pass
+        # print(f"Starting experiment at slice {start_slice}, step {start_step}")
 
     def _on_experiment_completed(self):
         """Handle experiment completion."""
