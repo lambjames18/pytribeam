@@ -474,6 +474,8 @@ class MainApplication(tk.Tk):
         )
 
         if success:
+            # Update the validation status
+            self.control_panel.set_validation_status(True)
             self._update_exp_control_buttons(start="disabled", buttons="disabled")
 
     # -------- Callbacks for experiment controller -------- #
