@@ -288,6 +288,8 @@ class MainApplication(tk.Tk):
             print("No file selected.")
             return
         print(f"Imported configuration file from: {self.config_path}")
+        # Clear old experiment settings when loading a new config
+        self.experiment_controller.clear_experiment_settings()
         self.control_panel.set_validation_status(
             False, "Configuration file is unvalidated"
         )
@@ -302,6 +304,8 @@ class MainApplication(tk.Tk):
         if app.clean_exit:
             self.config_path = Path(app.YAML_PATH)
             print(f"Imported configuration file from: {self.config_path}")
+            # Clear old experiment settings when config is edited
+            self.experiment_controller.clear_experiment_settings()
             self.control_panel.set_validation_status(
                 True, "Configuration file is valid"
             )

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable, Optional, Dict, Any, Tuple, List
 
 import pytribeam.types as tbt
-from pytribeam import workflow, stage, insertable_devices
+from pytribeam import workflow, stage, insertable_devices, utilities
 from pytribeam.GUI.common import AppConfig, StoppableThread
 from pytribeam.GUI.common.threading_utils import generate_escape_keypress
 from pytribeam.email import send_update_email
@@ -78,6 +78,27 @@ class ExperimentController:
         self._send_emails: bool = False
         self.experiment_settings: Optional[tbt.ExperimentSettings] = None
 
+    def clear_experiment_settings(self):
+        """Clear cached experiment settings and release resources.
+
+        This should be called when the configuration file is edited
+        to ensure old microscope connections are properly released.
+        """
+        if self.experiment_settings is not None:
+            # Disconnect microscope before clearing
+            try:
+                if self.experiment_settings.microscope is not None:
+                    utilities.disconnect_microscope(
+                        self.experiment_settings.microscope, quiet_output=True
+                    )
+                    print("Disconnected from microscope")
+            except Exception as e:
+                print(f"Warning: Error disconnecting microscope: {e}")
+
+            # Clear the reference to allow garbage collection
+            self.experiment_settings = None
+            print("Cleared cached experiment settings")
+
     def set_config_path(self, path: Path):
         """Set or update configuration file path.
 
@@ -120,6 +141,10 @@ class ExperimentController:
         """
         if self.config_path is None:
             return False, None, "No configuration file loaded"
+
+        # Clear old experiment settings before creating new ones
+        # This ensures old microscope connections are released
+        self.clear_experiment_settings()
 
         try:
             experiment_settings = workflow.setup_experiment(self.config_path)
@@ -431,6 +456,16 @@ class ExperimentController:
             )
         except Exception as e:
             print(f"Warning: Failed to retract devices: {e}")
+
+        # Disconnect microscope to release resources
+        try:
+            if experiment_settings.microscope is not None:
+                utilities.disconnect_microscope(
+                    experiment_settings.microscope, quiet_output=True
+                )
+                print("Disconnected from microscope")
+        except Exception as e:
+            print(f"Warning: Failed to disconnect microscope: {e}")
 
         # Get whether or not last step was completed
         is_step_completed = not self.state.should_stop_now

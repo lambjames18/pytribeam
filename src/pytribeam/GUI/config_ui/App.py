@@ -1253,18 +1253,21 @@ class Configurator:
         if microscope is None:
             return False
 
-        # Validate step
-        success, message = self.controller.validate_step(
-            step_index, microscope._microscope
-        )
+        try:
+            # Validate step
+            success, message = self.controller.validate_step(
+                step_index, microscope._microscope
+            )
 
-        pre = "" if success else "un"
-        messagebox.showinfo(
-            parent=self.toplevel,
-            title=f"Schema check completed {pre}successfully",
-            message=message,
-        )
-        return success
+            pre = "" if success else "un"
+            messagebox.showinfo(
+                parent=self.toplevel,
+                title=f"Schema check completed {pre}successfully",
+                message=message,
+            )
+            return success
+        finally:
+            microscope.disconnect()
 
     def validate_general(self):
         """Validate the general step to make sure it is correct."""
