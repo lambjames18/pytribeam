@@ -91,13 +91,15 @@ class ExperimentController:
                     utilities.disconnect_microscope(
                         self.experiment_settings.microscope, quiet_output=True
                     )
-                    print("Disconnected from microscope")
+                    # print("Disconnected from microscope")
             except Exception as e:
-                print(f"Warning: Error disconnecting microscope: {e}")
+                if str(e) == "Client is already disconnected.":
+                    pass
+                else:
+                    print(f"Warning: Error disconnecting microscope: {e}")
 
             # Clear the reference to allow garbage collection
             self.experiment_settings = None
-            print("Cleared cached experiment settings")
 
     def set_config_path(self, path: Path):
         """Set or update configuration file path.
@@ -463,9 +465,12 @@ class ExperimentController:
                 utilities.disconnect_microscope(
                     experiment_settings.microscope, quiet_output=True
                 )
-                print("Disconnected from microscope")
+                # print("Disconnected from microscope")
         except Exception as e:
-            print(f"Warning: Failed to disconnect microscope: {e}")
+            if str(e) == "Client is already disconnected.":
+                pass
+            else:
+                print(f"Warning: Failed to disconnect microscope: {e}")
 
         # Get whether or not last step was completed
         is_step_completed = not self.state.should_stop_now

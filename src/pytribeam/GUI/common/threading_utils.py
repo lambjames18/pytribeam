@@ -227,7 +227,7 @@ class TextRedirector:
     """Redirect stdout/stderr to a Tkinter Text widget.
 
     This allows capturing print statements and displaying them in the GUI
-    while optionally logging to a file.
+    while optionally logging to a file. Thread-safe for use with background threads.
     """
 
     def __init__(self, widget, tag: str = "stdout", log_path: Optional[str] = None):
@@ -241,6 +241,7 @@ class TextRedirector:
         self.widget = widget
         self.tag = tag
         self.log_path = log_path
+        self._main_thread_id = threading.current_thread().ident
 
         if self.log_path is not None:
             import os
@@ -258,31 +259,63 @@ class TextRedirector:
         """
         import tkinter as tk
 
-        # Check if we should autoscroll
-        autoscroll = getattr(self.widget, "autoscroll", True)
-        if autoscroll:
-            bottom = self.widget.yview()[1]
+        # Write to log file FIRST to ensure it always happens
+        # even if widget access fails
+        if self.log_path is not None:
+            try:
+                with open(self.log_path, "a") as f:
+                    f.write(text)
+            except Exception:
+                # Ignore file write errors to avoid breaking stdout
+                pass
 
-        # Write to widget
-        self.widget.config(state=tk.NORMAL)
-        self.widget.insert(tk.END, text, (self.tag,))
-        self.widget.config(state=tk.DISABLED)
+        # Write to widget using thread-safe approach
+        # If we're on the main thread, write directly
+        # If we're on a background thread, schedule on main thread
+        if threading.current_thread().ident == self._main_thread_id:
+            self._write_to_widget(text)
+        else:
+            # Schedule widget update on main thread using after()
+            try:
+                self.widget.after(0, self._write_to_widget, text)
+            except Exception:
+                # If after() fails (widget destroyed), fall back to direct write
+                self._write_to_widget(text)
 
-        # Autoscroll if at bottom
-        if autoscroll and bottom == 1:
-            self.widget.see(tk.END)
+    def _write_to_widget(self, text: str):
+        """Internal method to write text to widget.
 
-        # Force GUI update to show text immediately
+        Args:
+            text: Text to write
+        """
+        import tkinter as tk
+
+        # Protect ALL widget access in try/except
         try:
+            # Check if we should autoscroll
+            autoscroll = getattr(self.widget, "autoscroll", True)
+            if autoscroll:
+                bottom = self.widget.yview()[1]
+
+            # Write to widget
+            self.widget.config(state=tk.NORMAL)
+            self.widget.insert(tk.END, text, (self.tag,))
+            self.widget.config(state=tk.DISABLED)
+
+            # Autoscroll if at bottom
+            if autoscroll and bottom == 1:
+                self.widget.see(tk.END)
+
+            # Force GUI update to show text immediately
             self.widget.update_idletasks()
         except tk.TclError:
-            # Widget may have been destroyed
+            # Widget may have been destroyed or is not accessible
+            # This can happen when writing from a background thread
             pass
-
-        # Write to log file
-        if self.log_path is not None:
-            with open(self.log_path, "a") as f:
-                f.write(text)
+        except Exception:
+            # Catch any other widget-related errors to prevent
+            # breaking stdout/stderr redirection
+            pass
 
     def flush(self):
         """Flush output (required for file-like interface)."""
