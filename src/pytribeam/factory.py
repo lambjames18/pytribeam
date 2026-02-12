@@ -816,7 +816,6 @@ def general(
         # step count
         step_count = general_db["step_count"]
         EDAX_settings = None
-        email_settings = None
         yml_version = 1.0
 
     if yml_format.version >= 1.1:
@@ -829,26 +828,7 @@ def general(
                 port=edax_db["connection"]["port"],
             ),
         )
-        email_settings = None
         yml_version = 1.1
-
-    if yml_format.version >= 1.2:
-        email_db = general_db.get("email_update_settings")
-        # Only create EmailUpdateConfig if email settings are actually provided
-        if email_db and not ut.none_value_dictionary(email_db):
-            email_settings = tbt.EmailUpdateConfig(
-                ssh_host=email_db["ssh_host"],
-                ssh_port=email_db["ssh_port"],
-                ssh_user=email_db["ssh_user"],
-                ssh_key_path=email_db["ssh_key_path"],
-                smtp_server=email_db["smtp_server"],
-                smtp_port=email_db["smtp_port"],
-                sender=email_db["sender"],
-                sender_password=email_db["sender_password"],
-                recipients=email_db["recipients"].split(","),
-                update_frequency=email_db["update_frequency"],
-            )
-        yml_version = 1.2
 
     general_settings = tbt.GeneralSettings(
         yml_version=yml_version,
@@ -862,7 +842,6 @@ def general(
         EDS_OEM=eds_oem,
         exp_dir=Path(exp_dir),
         h5_log_name=h5_log_name,
-        email_update_settings=email_settings,
         EDAX_settings=EDAX_settings,
         step_count=step_count,
     )
@@ -2347,69 +2326,6 @@ def validate_EBSD_EDS_settings(
     return True
 
 
-def validate_email_settings(
-    yml_format: tbt.YMLFormatVersion,
-    email_settings: dict,
-) -> bool:
-    """Schema checking for email setting dictionary, format specified by yml_format"""
-    # Check the ssh_key
-    schema = Schema(
-        {
-            "ssh_host": And(
-                str,
-                error=f"Requested 'ssh_host' of '{email_settings['ssh_host']}', which must be a string.",
-            ),
-            "ssh_port": And(
-                int,
-                error=f"Requested 'ssh_port' of '{email_settings['ssh_port']}', which must be an int.",
-            ),
-            "ssh_user": And(
-                str,
-                error=f"Requested 'ssh_user' of '{email_settings['ssh_user']}', which must be a string.",
-            ),
-            "ssh_key_path": And(
-                str,
-                lambda x: Path(x).is_file(),
-                error=f"Requested 'ssh_key' of '{email_settings['ssh_key_path']}', which must be a string path to a valid file.",
-            ),
-            "smtp_server": And(
-                str,
-                error=f"Requested 'smtp_server' of '{email_settings['smtp_server']}', which must be a string.",
-            ),
-            "smtp_port": And(
-                int,
-                error=f"Requested 'smtp_port' of '{email_settings['smtp_port']}', which must be an int.",
-            ),
-            "sender": And(
-                str,
-                error=f"Requested 'sender' of '{email_settings['sender']}', which must be a string.",
-            ),
-            "sender_password": And(
-                str,
-                error=f"Requested 'sender_password' of '{email_settings['sender_password']}', which must be a string.",
-            ),
-            "recipients": And(
-                str,
-                error=f"Requested 'recipient' of '{email_settings['recipients']}', which must be a string.",
-            ),
-            "update_frequency": And(
-                int,
-                lambda x: x > 0,
-                error=f"Requested 'update_frequency' of '{email_settings['update_frequency']}', which must be a positive int (greater than 0).",
-            ),
-        },
-        ignore_extra_keys=True,
-    )
-
-    try:
-        schema.validate(email_settings)
-    except UnboundLocalError:
-        raise ValueError(
-            f"Error. Unsupported yml version {yml_format.version} provided."
-        )
-    return True
-
-
 def validate_general_settings(
     settings: dict,
     yml_format: tbt.YMLFormatVersion,
@@ -2454,11 +2370,8 @@ def validate_general_settings(
         exp_dir = settings.get("exp_dir")
         h5_log_name = settings.get("h5_log_name")
         edax_settings = None
-        email_settings = None
     if yml_format.version >= 1.1:
         edax_settings = settings.get("EDAX_settings")
-    if yml_format.version >= 1.2:
-        email_settings = settings.get("email_update_settings")
 
     # Validate the non-numeric values
     # Check sectioning axis
@@ -2490,13 +2403,6 @@ def validate_general_settings(
         eds_oem=eds_oem,
         edax_settings=edax_settings,
     )
-
-    # Check the email settings (only validate if settings are provided and not empty)
-    if email_settings is not None and not ut.none_value_dictionary(email_settings):
-        validate_email_settings(
-            yml_format=yml_format,
-            email_settings=email_settings,
-        )
 
     # Check exp dir
     try:

@@ -208,108 +208,6 @@ edax_settings_lut.add_entry("connection", edax_connection_lut)
 edax_settings_lut.add_entry("save_directory", edax_save_directory)
 edax_settings_lut.add_entry("project_name", edax_project_name)
 
-### Email LUT ###
-email_ssh_host = LUTField(
-    "SSH Tunnel Host",
-    "",
-    ctk.Entry,
-    {"dtype": str},
-    "The IP address of the host to tunnel through for the email server.",
-    str,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_ssh_port = LUTField(
-    "SSH Tunnel Port",
-    1025,
-    ctk.Entry,
-    {"dtype": int},
-    "The port to tunnel through for the email server.",
-    int,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_ssh_user = LUTField(
-    "SSH Tunnel User",
-    "",
-    ctk.Entry,
-    {"dtype": str},
-    "The username of the PC hosting the SSH tunnel.",
-    str,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_ssh_key_path = LUTField(
-    "SSH Key Path",
-    "",
-    ctk.PathEntry,
-    {"dtype": str, "directory": False, "operation": "open"},
-    "The path to the SSH private key used for passwordless authentication through tunnel.",
-    str,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_smtp_server = LUTField(
-    "SMTP Server",
-    "smtp.gmail.com",
-    ctk.Entry,
-    {"dtype": str},
-    "The SMTP server to use for sending the email.",
-    str,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_smtp_port = LUTField(
-    "SMTP Port",
-    587,
-    ctk.Entry,
-    {"dtype": int},
-    "The port of the SMTP server to use for sending the email.",
-    int,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_sender = LUTField(
-    "Email User",
-    "",
-    ctk.Entry,
-    {"dtype": str},
-    "The email address used to send the email.",
-    str,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_password = LUTField(
-    "Email Password",
-    "",
-    ctk.Entry,
-    {"dtype": str},
-    "The password for the email address used to send the email. For Gmail, this should be a 'App Password' generated from the Google account settings.",
-    str,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_recipients = LUTField(
-    "Recipients",
-    "",
-    ctk.Entry,
-    {"dtype": str},
-    "The email addresses to send the email to. Separate multiple addresses with commas.",
-    str,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_update_frequency = LUTField(
-    "Update Frequency (slices)",
-    50,
-    ctk.Entry,
-    {"dtype": int},
-    "The frequency (in number of slices) at which to send email updates.",
-    int,
-    tbt.Limit(min=1.2, max=max(VERSIONS)),
-)
-email_lut = LUT("email")
-email_lut.add_entry("ssh_host", email_ssh_host)
-email_lut.add_entry("ssh_port", email_ssh_port)
-email_lut.add_entry("ssh_user", email_ssh_user)
-email_lut.add_entry("ssh_key_path", email_ssh_key_path)
-email_lut.add_entry("smtp_server", email_smtp_server)
-email_lut.add_entry("smtp_port", email_smtp_port)
-email_lut.add_entry("sender", email_sender)
-email_lut.add_entry("sender_password", email_password)
-email_lut.add_entry("recipients", email_recipients)
-email_lut.add_entry("update_frequency", email_update_frequency)
 
 ### General LUT ###
 slice_thickness_um = LUTField(
@@ -444,7 +342,6 @@ general_lut.add_entry("EBSD_OEM", deepcopy(ebsd_oem))
 general_lut.add_entry("EDS_OEM", deepcopy(eds_oem))
 general_lut.add_entry("exp_dir", deepcopy(exp_dir))
 general_lut.add_entry("h5_log_name", deepcopy(h5_log_name))
-general_lut.add_entry("email_update_settings", deepcopy(email_lut))
 general_lut.add_entry("EDAX_settings", deepcopy(edax_settings_lut))
 general_lut.add_entry("step_count", deepcopy(step_count))
 

@@ -1641,21 +1641,6 @@ class EdaxEdsDetectorSlideStatus(Enum):
     UNKNOWN: str = "unknown"
 
 
-class EmailUpdateConfig(NamedTuple):
-    """Email configuration for sending notifications"""
-
-    ssh_host: str
-    ssh_port: int
-    ssh_user: str
-    ssh_key_path: str
-    smtp_server: str
-    smtp_port: int
-    sender: str
-    sender_password: str
-    recipients: List[str]
-    update_frequency: int  # in slices
-
-
 ### DERIVED CLASSES ###
 
 
@@ -1782,7 +1767,6 @@ class GeneralSettings(NamedTuple):
     exp_dir: Path
     h5_log_name: str
     step_count: int
-    email_update_settings: EmailUpdateConfig = None
     EDAX_settings: EDAXConfig = None
 
     @property
@@ -2667,7 +2651,6 @@ class YMLFormatVersion(YMLFormat, Enum):
             "EDS_OEM" "exp_dir": Path,
             "h5_log_name": str,
             "step_count": int,
-            "email_updates": EmailUpdateConfig,
             "EDAX_settings": EDAXConfig,
         },
         step_count_key="step_count",
