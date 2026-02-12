@@ -50,4 +50,5 @@ Thumbs.db
 *.sqlite3
 *.db
 
+# Test dir
 tests/test_dir/*
