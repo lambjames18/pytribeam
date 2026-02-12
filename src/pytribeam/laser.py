@@ -81,9 +81,7 @@ import time
 import warnings
 import contextlib, io
 import math
-from functools import singledispatch
 import socket
-import requests
 
 try:
     import Laser.PythonControl as tfs_laser

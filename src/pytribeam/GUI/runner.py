@@ -195,6 +195,28 @@ class MainApplication(tk.Tk):
         )
         self.status_panel.grid(row=1, column=1, sticky="nsew")
 
+    # -------- Menubar functions -------- #
+
+    def quit(self):
+        """
+        Quit the program.
+        This function is called when the user closes the window or selects the exit option from the menu.
+        """
+        sys.stdout = self.original_out
+        sys.stderr = self.original_err
+        if self.thread_obj is not None and self.thread_obj.is_alive():
+            self.thread_obj.raise_exception(KeyboardInterrupt)
+        self.update()
+        self.destroy()
+
+    def open_help(self):
+        """Open the user guide in a web browser."""
+        import webbrowser
+
+        ### TODO: Fix this to open local file properly on all OSes
+        # webbrowser.open(f"file://{self.resources.user_guide_path}")
+        webbrowser.open(f"{self.resources.user_guide_path}")
+
     def change_theme(self):
         """Change the theme of the app."""
         if self.theme.theme_type == "light":
@@ -271,6 +293,8 @@ class MainApplication(tk.Tk):
             save_path = save_path.with_suffix(".txt")
         shutil.copy(self.terminal_log_path, save_path)
         messagebox.showinfo("Success", f"Log file saved to {save_path}")
+
+    # -------- Config functions -------- #
 
     def new_config(self):
         print("Creating new configuration file")
@@ -543,255 +567,6 @@ class MainApplication(tk.Tk):
         self._update_exp_control_buttons(
             start="disabled", step="disabled", slice="disabled", hard="disabled"
         )
-
-    # -------- Legacy experiment control functions (now handled by ExperimentController) -------- #
-
-    def start_experiment_old(self):
-        # Set the start exp button to be disabled and green
-        self._update_exp_control_buttons(start="disabled", buttons="disabled")
-
-        # Grab experiment info
-        starting_slice = self.control_panel.starting_slice_var.get()
-        starting_step_name = self.control_panel.starting_step_var.get()
-
-        # Run preflight check
-        experiment_settings: tbt.ExperimentSettings = self.validate_config(
-            return_settings=True
-        )
-        if experiment_settings is None:
-            self._update_exp_control_buttons(start="normal", buttons="normal")
-            return
-        else:
-            # Process the experiment settings
-            num_steps = experiment_settings.general_settings.step_count
-            step_names = [i.name for i in experiment_settings.step_sequence]
-            starting_step_number = step_names.index(starting_step_name)
-            ending_slice = experiment_settings.general_settings.max_slice_number
-            # Log the experiment settings
-            log.experiment_settings(
-                slice_number=starting_slice,
-                step_number=starting_step_number,
-                log_filepath=experiment_settings.general_settings.log_filepath,
-                yml_path=self.config_path,
-            )
-            print("Preflight check successful")
-
-        # Check if EBSD and EDS are enabled
-        if not experiment_settings.enable_EBSD or not experiment_settings.enable_EDS:
-            if experiment_settings.enable_EBSD:
-                message_part1 = "EDS is not enabled"
-            elif experiment_settings.enable_EDS:
-                message_part1 = "EBSD is not enabled"
-            else:
-                message_part1 = "EBSD and EDS are not enabled"
-
-            message_part2 = ", you will not have access to safety checking and these modalities during data collection. Please ensure these detectors are retracted before proceeding."
-            messagebox.showwarning("Warning", message_part1 + message_part2)
-
-        # Setup the progress bar
-        start_point = (starting_slice - 1) * num_steps + starting_step_number
-        self.status_panel.progress.set(
-            int((start_point - 1) / (ending_slice * num_steps) * 100)
-        )
-        self.status_panel.current_step_var.set(step_names[starting_step_number])
-        self.status_panel.current_slice_var.set(starting_slice)
-
-        # Setup timer
-        slice_times = []
-
-        # Run the experiment (loop over the slices and steps)
-        # Three levels here: try to catch KeyboardInterrupt, for i in slices, for j in steps
-        print(
-            f'Starting experiment at slice {starting_slice} and step "{starting_step_name}", number {starting_step_number+1} of {len(step_names)}'
-        )
-        try:
-            if self.stop_now.get():
-                raise KeyboardInterrupt
-            for i in range(starting_slice, ending_slice + 1):
-                # Get the slice start time and update the slice info
-                t0 = time.time()
-                self._update_slice_info(i)
-
-                for j in range(num_steps):
-                    # Skip steps if we are starting in the middle of a slice
-                    if i == starting_slice and j < starting_step_number:
-                        continue
-
-                    # Update the current step
-                    self._update_step_info(step_names[j])
-
-                    # Create a thread object to run the step_call function
-                    args = (i, j + 1, experiment_settings)
-                    out_dict = self.run_in_thread(step_call_wrapper, *args)
-                    stop_step = self.stop_after_step.get()
-                    stop_slice = self.stop_after_slice.get()
-                    stop_now = self.stop_now.get()
-                    if out_dict["error"]:
-                        stop_now = True
-
-                    # Update progress bar if we didn't hard stop
-                    if not stop_now:
-                        perc_done = int(
-                            ((i - 1) * num_steps + (j + 1))
-                            / (ending_slice * num_steps)
-                            * 100
-                        )
-                        self.status_panel.progress.set(perc_done)
-                        try:
-                            self.update_idletasks()
-                        except tk.TclError:
-                            return
-
-                    # Break out if we are stopping this step or right now
-                    if stop_step or stop_now:
-                        break
-
-                # Break out if we are stopping at all
-                if stop_step or stop_slice or stop_now:
-                    break
-                else:
-                    try:
-                        self.update_idletasks()
-                    except tk.TclError:
-                        return
-                    t1 = time.time()
-                    slice_times.append(t1 - t0)
-                    avg_time = round(sum(slice_times) / len(slice_times))
-                    remaining_time = avg_time * (ending_slice - i)
-                    avg_time_str = str(datetime.timedelta(seconds=avg_time))
-                    remaining_time_str = str(datetime.timedelta(seconds=remaining_time))
-                    self.status_panel.slice_time_var.set(avg_time_str)
-                    self.status_panel.time_left_var.set(remaining_time_str)
-
-        except KeyboardInterrupt:
-            print(
-                "-----> Experiment was stopped immediately by user (keyboard interrupt)"
-            )
-            if self.thread_obj is not None and self.thread_obj.is_alive():
-                self.thread_obj.raise_exception(KeyboardInterrupt)
-                stop_now = True
-
-        # Handle the end of the experiment
-        if stop_now or stop_step or (stop_slice and i != ending_slice):
-            # The experiment did not finish
-            print("-----> Experiment stopped <-----")
-            if not stop_now and j + 1 == num_steps:
-                self.control_panel.starting_slice_var.set(i + 1)
-                self.control_panel.starting_step_var.set(step_names[0])
-            elif not stop_now:
-                self.control_panel.starting_slice_var.set(i)
-                self.control_panel.starting_step_var.set(step_names[j + 1])
-            else:
-                pass
-        elif i == ending_slice and j == num_steps - 1:
-            # The experiment finished
-            print("-----> Experiment complete <-----")
-            self.control_panel.starting_slice_var.set(1)
-            self.control_panel.starting_step_var.set(step_names[0])
-        else:
-            # The experiment ended for an unknown reason
-            print("-----> Experiment stopped (unknown) <-----")
-        # Ensure that all devices are retracted
-        if not stop_now:
-            insertable_devices.retract_all_devices(
-                microscope=experiment_settings.microscope,
-                enable_EBSD=experiment_settings.enable_EBSD,
-                enable_EDS=experiment_settings.enable_EDS,
-            )
-        # Reset the stop flags
-        self.stop_after_slice.set(False)
-        self.stop_after_step.set(False)
-        self.stop_now.set(False)
-        # Update the GUI
-        self._update_exp_control_buttons()
-
-    def run_in_thread(self, func, *args, **kwargs):
-        out_dict = {"error": False}
-        self.thread_obj = StoppableThread(
-            target=func, args=(out_dict,) + args, kwargs=kwargs
-        )
-        self.thread_obj.start()
-        while self.thread_obj.is_alive():
-            try:
-                self.update()
-            except tk.TclError:
-                return
-            if self.stop_now.get() and self.thread_obj.is_alive():
-                generate_escape_keypress()
-                self.thread_obj.raise_exception(KeyboardInterrupt)
-                break
-        return out_dict
-
-    def stop_step_old(self):
-        """
-        Stop the experiment after the current step is complete.
-        This is an experiment control function that sets a flag to stop the experiment after the current step is complete.
-        """
-        print("-----> Stopping after current step")
-        if self.thread_obj is None:
-            return
-        self.stop_after_step.set(True)
-        self._update_exp_control_buttons(
-            start="disabled",
-            step="disabled",
-            slice="disabled",
-            hard="normal",
-            buttons="disabled",
-        )
-
-    def stop_slice_old(self):
-        """
-        Stop the experiment after the current slice is complete.
-        This is an experiment control function that sets a flag to stop the experiment after the current slice is complete.
-        """
-        print("-----> Stopping after current slice")
-        if self.thread_obj is None:
-            return
-        self.stop_after_slice.set(True)
-        self._update_exp_control_buttons(
-            start="disabled",
-            step="normal",
-            slice="disabled",
-            hard="normal",
-            buttons="disabled",
-        )
-
-    def stop_hard_old(self):
-        """
-        Stop the experiment immediately.
-        This is an experiment control function that sets a flag to stop the experiment immediately.
-        """
-        print("-----> Experiment was stopped immediately by user (button press)")
-        if self.thread_obj is None:
-            return
-        self.stop_now.set(True)
-        self._update_exp_control_buttons(
-            start="disabled",
-            step="disabled",
-            slice="disabled",
-            hard="disabled",
-            buttons="disabled",
-        )
-
-    def open_help(self):
-        """Open the user guide in a web browser."""
-        import webbrowser
-
-        ### TODO: Fix this to open local file properly on all OSes
-        # webbrowser.open(f"file://{self.resources.user_guide_path}")
-        webbrowser.open(f"{self.resources.user_guide_path}")
-
-    def quit(self):
-        """
-        Quit the program.
-        This function is called when the user closes the window or selects the exit option from the menu.
-        """
-        sys.stdout = self.original_out
-        sys.stderr = self.original_err
-        if self.thread_obj is not None and self.thread_obj.is_alive():
-            self.thread_obj.raise_exception(KeyboardInterrupt)
-        self.update()
-        self.destroy()
 
 
 @contextlib.contextmanager
