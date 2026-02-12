@@ -162,8 +162,6 @@ class Constants(NamedTuple):
     pre_lasing_dataset_name = "Laser Power Before"
     post_lasing_dataset_name = "Laser Power After"
     specimen_current_dataset_name = "Specimen Current"
-    ebsd_camera_saturation_dataset_name = "Camera Saturation"
-    ebsd_average_ci_dataset_name = "Average CI"
     settings_dtype = np.dtype(
         [
             ("Slice", "<u4"),
@@ -197,22 +195,6 @@ class Constants(NamedTuple):
         [
             ("Slice", "<u4"),
             ("Current", "<f8"),
-            ("Timestamp", h5py.special_dtype(vlen=str)),
-            ("UNIX time", "<u8"),
-        ]
-    )
-    ebsd_camera_saturation_dtype = np.dtype(
-        [
-            ("Slice", "<u4"),
-            ("Saturation", "<f8"),
-            ("Timestamp", h5py.special_dtype(vlen=str)),
-            ("UNIX time", "<u8"),
-        ]
-    )
-    ebsd_average_ci_dtype = np.dtype(
-        [
-            ("Slice", "<u4"),
-            ("CI", "<f8"),
             ("Timestamp", h5py.special_dtype(vlen=str)),
             ("UNIX time", "<u8"),
         ]
@@ -288,8 +270,6 @@ class Constants(NamedTuple):
     min_map_time_s = 30
     specimen_current_hfw_mm = 1.0e-3
     specimen_current_delay_s = 2.0
-    ebsd_camera_saturation_hfw_mm = 1.0e-3
-    ebsd_camera_saturation_delay_s = 2.0
 
     # Test suite constants
     test_hardware_movement = True

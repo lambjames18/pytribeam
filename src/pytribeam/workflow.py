@@ -536,11 +536,6 @@ def pre_flight_check(yml_path: Path) -> tbt.ExperimentSettings:
         status = devices.connect_EBSD()
         if status == tbt.RetractableDeviceState.ERROR:
             raise SystemError("EBSD camera is connected but in error state.")
-        if (
-            general_settings.EBSD_OEM == tbt.ExternalDeviceOEM.EDAX
-            and general_settings.yml_version >= 1.1
-        ):
-            laser.ebsd_preflight(general_settings=general_settings)
     if enable_EDS:
         status = devices.connect_EDS()
         if status == tbt.RetractableDeviceState.ERROR:
