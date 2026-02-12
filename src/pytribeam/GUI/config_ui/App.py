@@ -569,12 +569,26 @@ class Configurator:
             interface.disconnect()
         # First set the beam type (special case)
         beam_type = imaging_settings.beam.__getattribute__("type").value
-        # If this is a fib step, we check if the beam is ion, if not, we raise a warning and abort
+        # For FIB / EBSD / EDS steps, the beam must be ion / electron / electron, otherwise raise an error
         if self.STEP == "fib" and beam_type != "ion":
             messagebox.showerror(
                 parent=self.toplevel,
                 title="Error",
                 message="Importing imaging conditions for a FIB step requires the active beam to be an ion beam.",
+            )
+            return
+        elif self.STEP == "ebsd" and beam_type != "electron":
+            messagebox.showerror(
+                parent=self.toplevel,
+                title="Error",
+                message="Importing imaging conditions for an EBSD step requires the active beam to be an electron beam.",
+            )
+            return
+        elif self.STEP == "eds" and beam_type != "electron":
+            messagebox.showerror(
+                parent=self.toplevel,
+                title="Error",
+                message="Importing imaging conditions for an EDS step requires the active beam to be an electron beam.",
             )
             return
         # Image steps do not have a parent key (the step is the parent key), but FIB steps have imaging parameters within an Image and Mill parent
