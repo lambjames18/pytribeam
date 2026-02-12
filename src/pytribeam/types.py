@@ -220,12 +220,6 @@ FIBPattern(NamedTuple)
 FIBSettings(NamedTuple)
     FIB settings for the microscope.
 
-EBSDGridType(IntEnum)
-    Enum for EBSD grid types.
-
-EBSDScanBox(NamedTuple)
-    EBSD scan box settings.
-
 EBSDSettings(NamedTuple)
     EBSD settings for the microscope.
 

@@ -315,12 +315,7 @@ def _(
     )
 
     # take map
-    laser.map_ebsd(
-        general_settings=general_settings,
-        step_settings=step_settings,
-        slice_number=slice_number,
-        step=step,
-    )
+    laser.map_ebsd()
 
     # retract detector(s)
     devices.retract_EBSD(microscope=microscope)
