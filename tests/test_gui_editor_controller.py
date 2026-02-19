@@ -398,7 +398,7 @@ class TestStepNamesAndCount:
 class TestRenaming:
 
     def test_rename_step_success(self, controller_with_pipeline):
-        controller_with_pipeline.add_step("image", name="old_name")
+        controller_with_pipeline.add_step("image")
         result = controller_with_pipeline.rename_step(1, "new_name")
         assert result is True
         assert controller_with_pipeline.pipeline.get_step(1).name == "new_name"
@@ -411,7 +411,7 @@ class TestRenaming:
         assert controller.rename_step(1, "new") is False
 
     def test_rename_fires_callback(self, controller_with_pipeline):
-        controller_with_pipeline.add_step("image", name="old")
+        controller_with_pipeline.add_step("image")
         received = {}
         controller_with_pipeline.register_callback(
             "step_renamed",
@@ -430,20 +430,24 @@ class TestVersioning:
         assert controller.get_version() == 1.0
 
     def test_set_version_updates_internal_version(self, controller_with_pipeline):
-        controller_with_pipeline.set_version(2.0)
-        assert controller_with_pipeline.get_version() == 2.0
+        controller_with_pipeline.set_version(1.0)
+        assert controller_with_pipeline.get_version() == 1.0
 
     def test_set_version_fires_callback(self, controller_with_pipeline):
         received = {}
         controller_with_pipeline.register_callback(
             "version_changed", lambda v: received.update({"v": v})
         )
-        controller_with_pipeline.set_version(2.0)
-        assert received["v"] == 2.0
+        controller_with_pipeline.set_version(1.0)
+        assert received["v"] == 1.0
 
     def test_set_version_without_pipeline_does_not_raise(self, controller):
-        controller.set_version(2.0)
-        assert controller.get_version() == 2.0
+        controller.set_version(1.0)
+        assert controller.get_version() == 1.0
+
+    def test_set_invalid_version(self, controller: EditorController):
+        with pytest.raises(NotImplementedError):
+            controller.set_version(controller._version + 100)
 
 
 # ----------------------------------------------------------------------

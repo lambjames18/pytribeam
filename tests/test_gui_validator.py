@@ -102,7 +102,6 @@ class TestSetVersion:
     def test_set_version_changes_format(self, validator):
         # Calling set_version should not raise
         validator.set_version(1.0)
-        validator.set_version(2.0)
 
     def test_validator_initializes_with_version_1(self, validator):
         # Should default to 1.0
